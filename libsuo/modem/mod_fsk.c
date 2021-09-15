@@ -1,4 +1,4 @@
-#include "simple_transmitter.h"
+#include "mod_fsk.h"
 #include "suo_macros.h"
 #include <stdlib.h>
 #include <string.h>
@@ -8,11 +8,11 @@
 #define FRAMELEN_MAX 0x900
 static const float pi2f = 6.283185307179586f;
 
-struct simple_transmitter {
+struct mod_fsk {
 	/* Configuration */
-	struct simple_transmitter_conf c;
-	uint32_t symrate;
-	float sample_ns;
+	struct mod_fsk_conf c;
+	uint32_t symrate; // integer symbol rate
+	float sample_ns; // Sample duration in ns
 	float freq0, freq1;
 
 	/* State */
@@ -34,19 +34,20 @@ struct simple_transmitter {
 };
 
 
-static void *init(const void *conf_v)
+static void* mod_fsk_init(const void *conf_v)
 {
-	struct simple_transmitter *self = malloc(sizeof(struct simple_transmitter));
+	struct mod_fsk *self = malloc(sizeof(struct mod_fsk));
 	if(self == NULL) return NULL;
-	memset(self, 0, sizeof(struct simple_transmitter));
+	memset(self, 0, sizeof(struct mod_fsk));
 
-	self->c = *(const struct simple_transmitter_conf*)conf_v;
+	self->c = *(const struct mod_fsk_conf*)conf_v;
 	const float samplerate = self->c.samplerate;
 
 	self->symrate = 4294967296.0f * self->c.symbolrate / samplerate;
 	self->sample_ns = 1.0e9f / samplerate;
 
-	const float deviation = pi2f * self->c.modindex * 0.5f * self->c.symbolrate / samplerate, cf = pi2f * self->c.centerfreq / samplerate;
+	const float deviation = pi2f * self->c.modindex * 0.5f * self->c.symbolrate / samplerate
+	const float cf = pi2f * self->c.centerfreq / samplerate;
 	self->freq0 = cf - deviation;
 	self->freq1 = cf + deviation;
 
@@ -56,26 +57,27 @@ static void *init(const void *conf_v)
 }
 
 
-static int destroy(void *arg)
+static int mod_fsk_destroy(void *arg)
 {
+	struct mod_fsk *self = arg;
+	nco_crcf_destroy(self->l_nco);
 	/* TODO (low priority since memory gets freed in the end anyway) */
-	(void)arg;
 	return 0;
 }
 
 
 static int set_callbacks(void *arg, const struct tx_input_code *input, void *input_arg)
 {
-	struct simple_transmitter *self = arg;
+	struct mod_fsk *self = arg;
 	self->input = *input;
 	self->input_arg = input_arg;
 	return 0;
 }
 
 
-static tx_return_t execute(void *arg, sample_t *samples, size_t maxsamples, timestamp_t timestamp)
+static tx_return_t mod_fsk_execute(void *arg, sample_t *samples, size_t maxsamples, timestamp_t timestamp)
 {
-	struct simple_transmitter *self = arg;
+	struct mod_fsk *self = arg;
 	self->input.tick(self->input_arg, timestamp);
 
 	size_t nsamples = 0;
@@ -134,18 +136,31 @@ static tx_return_t execute(void *arg, sample_t *samples, size_t maxsamples, time
 }
 
 
-const struct simple_transmitter_conf simple_transmitter_defaults = {
+const struct mod_fsk_conf mod_fsk_defaults = {
 	.samplerate = 1e6,
 	.symbolrate = 9600,
+	//.bits_per_symbol = 2,
 	.centerfreq = 100000,
-	.modindex = 0.5
+	.modindex = 0.5,
+	.bt = 0.5
 };
 
-CONFIG_BEGIN(simple_transmitter)
+
+CONFIG_BEGIN(mod_fsk)
 CONFIG_F(samplerate)
 CONFIG_F(symbolrate)
+//CONFIG_I(bits_per_symbol)
 CONFIG_F(centerfreq)
 CONFIG_F(modindex)
+CONFIG_F(bt)
 CONFIG_END()
 
-const struct transmitter_code simple_transmitter_code = { "simple_transmitter", init, destroy, init_conf, set_conf, set_callbacks, execute };
+const struct transmitter_code mod_fsk = {
+	.name = "mod_fsk",
+	.init = mod_fsk_init,
+	.destroy = mod_fsk_destroy,
+	.init_conf = init_conf, // Generate by the CONFIG-macro
+	.set_conf = set_conf, // Generate by the CONFIG-macro
+	.set_callbacks = set_callbacks,
+	.execute = mod_fsk_execute
+};

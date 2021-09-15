@@ -1,4 +1,4 @@
-#include "simple_receiver.h"
+#include "demod_fsk_mfilt.h"
 #include "suo_macros.h"
 #include <string.h>
 #include <assert.h>
@@ -12,9 +12,10 @@
 
 static const float pi2f = 6.283185307179586f;
 
-struct simple_receiver {
+struct fsk_demod_mfilt {
 	/* Configuration */
-	struct simple_receiver_conf c;
+	struct fsk_demod_mfilt_conf c;
+
 	//float resamprate;
 	unsigned resampint;
 	uint64_t syncmask;
@@ -35,7 +36,10 @@ struct simple_receiver {
 	unsigned ss_p, ss_ps;
 
 	/* General metadata */
-	float est_power;
+	float est_power; // Running estimate of the signal power
+
+	//symbol_callback;
+	//softsymbol_callback;
 
 	/* liquid-dsp objects */
 	nco_crcf l_nco;
@@ -49,18 +53,17 @@ struct simple_receiver {
 
 	/* Buffers */
 	struct frame frame;
-	/* Allocate space for flexible array member */
-	bit_t frame_buffer[FRAMELEN_MAX];
+
 };
 
 
 /* Fixed matched filters for 4x oversampling, h=0.6 and BT=0.5 */
 #define FIXED_MF_LEN 12
 static const float complex fixed_mf0[FIXED_MF_LEN] = {
--0.0422f-0.0581f*I,0.2284f+0.3138f*I,0.4524f+0.6064f*I,0.6247f+0.7153f*I,0.8126f+0.5769f*I,0.9750f+0.2220f*I,0.9750f-0.2220f*I,0.8126f-0.5769f*I,0.6247f-0.7153f*I,0.4524f-0.6064f*I,0.2284f-0.3138f*I,-0.0422f+0.0581f*I
+	-0.0422f-0.0581f*I,0.2284f+0.3138f*I,0.4524f+0.6064f*I,0.6247f+0.7153f*I,0.8126f+0.5769f*I,0.9750f+0.2220f*I,0.9750f-0.2220f*I,0.8126f-0.5769f*I,0.6247f-0.7153f*I,0.4524f-0.6064f*I,0.2284f-0.3138f*I,-0.0422f+0.0581f*I
 };
 static const float complex fixed_mf1[FIXED_MF_LEN] = {
--0.0422f+0.0581f*I,0.2284f-0.3138f*I,0.4524f-0.6064f*I,0.6247f-0.7153f*I,0.8126f-0.5769f*I,0.9750f-0.2220f*I,0.9750f+0.2220f*I,0.8126f+0.5769f*I,0.6247f+0.7153f*I,0.4524f+0.6064f*I,0.2284f+0.3138f*I,-0.0422f-0.0581f*I
+	-0.0422f+0.0581f*I,0.2284f-0.3138f*I,0.4524f-0.6064f*I,0.6247f-0.7153f*I,0.8126f-0.5769f*I,0.9750f-0.2220f*I,0.9750f+0.2220f*I,0.8126f+0.5769f*I,0.6247f+0.7153f*I,0.4524f+0.6064f*I,0.2284f+0.3138f*I,-0.0422f-0.0581f*I
 };
 
 
@@ -78,14 +81,14 @@ static inline float clampf(float v, float limit)
 }
 
 
-static void *simple_receiver_init(const void *conf_v)
+static void *demod_fsk_mfilt_init(const void *conf_v)
 {
-	struct simple_receiver_conf c;
+	struct fsk_demod_mfilt_conf c;
 
 	/* Initialize state and copy configuration */
-	struct simple_receiver *self = malloc(sizeof(struct simple_receiver));
-	memset(self, 0, sizeof(struct simple_receiver));
-	c = self->c = *(const struct simple_receiver_conf *)conf_v;
+	struct demod_fsk_mfilt *self = malloc(sizeof(struct demod_fsk_mfilt));
+	memset(self, 0, sizeof(struct demod_fsk_mfilt));
+	c = self->c = *(const struct fsk_demod_mfilt_conf *)conf_v;
 
 	self->syncmask = (1ULL << c.synclen) - 1;
 	self->framepos = c.framelen;
@@ -122,7 +125,7 @@ static void *simple_receiver_init(const void *conf_v)
 }
 
 
-static int simple_receiver_destroy(void *arg)
+static int demod_fsk_mfilt_destroy(void *arg)
 {
 	/* TODO (low priority since memory gets freed in the end anyway) */
 	(void)arg;
@@ -130,7 +133,7 @@ static int simple_receiver_destroy(void *arg)
 }
 
 
-static void simple_deframer_execute(struct simple_receiver *self, unsigned bit, timestamp_t time)
+static void simple_deframer_execute(struct demod_fsk_mfilt *self, unsigned bit, timestamp_t time)
 {
 	unsigned framepos = self->framepos;
 	const unsigned framelen = self->c.framelen;
@@ -153,8 +156,9 @@ static void simple_deframer_execute(struct simple_receiver *self, unsigned bit, 
 	latest_bits <<= 1;
 	latest_bits |= bit;
 	self->latest_bits = latest_bits;
+
 	/* Don't look for new syncword inside a frame */
-	if(!receiving_frame) {
+	if (!receiving_frame) {
 		unsigned syncerrs = __builtin_popcountll((latest_bits & self->syncmask) ^ self->c.syncword);
 
 		if(syncerrs <= 3) {
@@ -162,12 +166,20 @@ static void simple_deframer_execute(struct simple_receiver *self, unsigned bit, 
 			framepos = 0;
 			receiving_frame = 1;
 
+			self->frame.timestamp = time;
+
 			/* Fill in some metadata at start of the frame */
-			self->frame.m.cfo = (nco_crcf_get_frequency(self->l_nco)
-				- self->freq_center ) / self->nco_1Hz;
+			self->frame.m.cfo = (nco_crcf_get_frequency(self->l_nco) - self->freq_center ) / self->nco_1Hz;
 			self->frame.m.power = 10.0f * log10f(self->est_power);
-			self->frame.m.ber = (float)syncerrs; // not real BER :D
-			self->frame.m.time = time; // TODO decide where it should exactly point
+			self->frame.m.ber = (float)syncerrs;
+
+			float cfo = (nco_crcf_get_frequency(self->l_nco) - self->freq_center ) / self->nco_1Hz;
+			SET_METADATA_F(self->frame, METADATA_CFO, cfo);
+			float rssi = 10.0f * log10f(self->est_power);
+			SET_METADATA_F(self->frame, METADATA_RSSI, rssi);
+			SET_METADATA_I(self->frame, METADATA_SYNC_ERRORS, syncerrs);
+
+
 		}
 	}
 
@@ -178,9 +190,9 @@ static void simple_deframer_execute(struct simple_receiver *self, unsigned bit, 
 }
 
 
-static int simple_receiver_execute(void *arg, const sample_t *samples, size_t nsamp, timestamp_t timestamp)
+static int demod_fsk_mfilt_execute(void *arg, const sample_t *samples, size_t nsamp, timestamp_t timestamp)
 {
-	struct simple_receiver *self = arg;
+	struct demod_fsk_mfilt *self = arg;
 	self->output.tick(self->output_arg, timestamp);
 
 	/* Copy some often used variables to local variables */
@@ -317,28 +329,29 @@ static int simple_receiver_execute(void *arg, const sample_t *samples, size_t ns
 
 
 
-static int simple_receiver_set_callbacks(void *arg, const struct rx_output_code *output, void *output_arg)
+static int demod_fsk_mfilt_set_callbacks(void *arg, const struct rx_output_code *output, void *output_arg)
 {
-	struct simple_receiver *self = arg;
+	struct demod_fsk_mfilt *self = arg;
 	self->output = *output;
 	self->output_arg = output_arg;
 	return 0;
 }
 
 
-const struct simple_receiver_conf simple_receiver_defaults = {
+const struct fsk_demod_mfilt_conf fsk_demod_mfilt_defaults = {
 	.samplerate = 1e6,
 	.symbolrate = 9600,
+	//.bits_per_symbol = 2,
 	.centerfreq = 100000,
 	.syncword = 0x36994625,
 	.synclen = 32,
 	.framelen = 800
 };
 
-
-CONFIG_BEGIN(simple_receiver)
+CONFIG_BEGIN(fsk_demod_mfilt)
 CONFIG_F(samplerate)
 CONFIG_F(symbolrate)
+//CONFIG_I(bits_per_symbol)
 CONFIG_F(centerfreq)
 CONFIG_I(syncword)
 CONFIG_I(synclen)
@@ -346,4 +359,12 @@ CONFIG_I(framelen)
 CONFIG_END()
 
 
-const struct receiver_code simple_receiver_code = { "simple_receiver", simple_receiver_init, simple_receiver_destroy, init_conf, set_conf, simple_receiver_set_callbacks, simple_receiver_execute };
+const struct receiver_code demod_fsk_mfilt_code = {
+	.name = "demod_fsk_mfilt",
+	.init = demod_fsk_mfilt_init,
+	.destroy = demod_fsk_mfilt_destroy,
+	.init_conf = init_conf, // Constructed by CONFIG-macro
+	.set_conf = set_conf, // Constructed by CONFIG-macro
+	.set_callbacks = fsk_demod_mfilt_set_callbacks,
+	.exectue = fsk_demod_mfilt_execute
+};
