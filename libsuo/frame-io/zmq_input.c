@@ -160,8 +160,8 @@ static int get_frame(void *arg, struct frame *frame, size_t maxlen, timestamp_t 
 	if (nread <= 0) {
 		/* No frame in queue */
 		return -1;
-	} else if((size_t)nread == sizeof(*frame) + frame->m.len) {
-		return frame->m.len;
+	} else if((size_t)nread == sizeof(*frame) + frame->len) {
+		return frame->len;
 	} else {
 		fprintf(stderr, "Warning: too long frame?\n");
 		return -1;

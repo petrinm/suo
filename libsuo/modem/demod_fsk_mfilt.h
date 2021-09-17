@@ -2,8 +2,8 @@
  * (G)FSK demodulator implementation using matched filters.
  */
 
-#ifndef LIBSUO_DEMOD_FSK_MFILT_H
-#define LIBSUO_DEMOD_FSK_MFILT_H
+#ifndef __LIBSUO_DEMOD_FSK_MFILT_H__
+#define __LIBSUO_DEMOD_FSK_MFILT_H__
 
 #include "suo.h"
 
@@ -19,28 +19,19 @@ struct fsk_demod_mfilt_conf {
 	 */
 	float symbolrate;
 
-	/* Number of bit in one symbol (symbol complexity) */
-	//unsigned bits_per_symbol;
+	/*
+	 * Number of bit in one symbol (symbol complexity)
+	 */
+	unsigned bits_per_symbol;
 
 	/*
 	 * Signal center frequency as Hz
 	 */
-	float centerfreq;
+	float center_freq;
 
-	/*
-	 * Sync word which is being searched
-	 */
-	uint64_t syncword;
-
-	/*
-	 * Sync word length (symbols)
-	 */
-	unsigned int synclen;
-
-	unsigned int framelen;
 };
 
 /* Module descriptor */
-extern const struct receiver_code demod_fsk_mfilt;
+extern const struct receiver_code demod_fsk_mfilt_code;
 
-#endif /* LIBSUO_DEMOD_FSK_MFILT_H */
+#endif /* __LIBSUO_DEMOD_FSK_MFILT_H__ */

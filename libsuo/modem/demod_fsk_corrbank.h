@@ -1,23 +1,27 @@
 /*
- * GFSK demodulator implementation using correlator bank
+ * GFSK/GMSK demodulator implementation using correlator bank
  */
-#ifndef DEMOD_GFSK_CORRBANK_H
-#define DEMOD_GFSK_CORRBANK_H
+#ifndef __LIBSUO_DEMOD_GFSK_CORRBANK_H__
+#define __LIBSUO_DEMOD_GFSK_CORRBANK_H__
 
 #include "suo.h"
 
 struct fsk_demod_corrbank_conf {
+
 	/* Samples per symbol */
-	unsigned sps;
+	unsigned int sps;
 
-	unsigned corr_len, corr_num;
+	/* Correlator lenght */
+	unsigned int corr_len;
 
-	struct deframer_code deframer;
+	/* Number of correlators */
+	unsigned int corr_num;
+
 };
 
 
 /* Module descriptor */
-extern const struct receiver_code demod_fsk_corrbank;
+extern const struct receiver_code demod_fsk_corrbank_code;
 
 
-#endif /* DEMOD_GFSK_CORRBANK_H */
+#endif /* __LIBSUO_DEMOD_GFSK_CORRBANK_H__ */

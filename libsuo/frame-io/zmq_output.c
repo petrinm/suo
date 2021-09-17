@@ -138,11 +138,11 @@ static void *zmq_decoder_main(void *arg)
 				/* Decode failed. TODO: send or save diagnostics somewhere */
 			}
 
-#ifdef PRINT_DIAGNOSTICS
+#if 0 // def PRINT_DIAGNOSTICS
 		const struct metadata *metadata = &decoded->m;
 			printf("%d  Timestamp: %lld ns   Mode: %u  CFO: %E Hz  RSSI: %6.2f dB\n\n",
 				ndecoded,
-				(long long)metadata->time,
+				(long long)decoded->timestamp,
 				metadata->mode,
 				(double)metadata->cfo, (double)metadata->power);
 #endif
@@ -171,7 +171,7 @@ static int frame(void *arg, const struct frame *frame)
 	/* Non-blocking send to avoid blocking the receiver in case
 	 * decoder runs out of CPU time and ZMQ buffer fills up.
 	 * Frames are just discarded with a warning message in the case. */
-	ZMQCHECK(zmq_send(s, frame, sizeof(struct frame) + frame->m.len, ZMQ_DONTWAIT));
+	ZMQCHECK(zmq_send(s, frame, sizeof(struct frame) + frame->len, ZMQ_DONTWAIT));
 	return 0;
 fail:
 	return -1;

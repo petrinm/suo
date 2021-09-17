@@ -1,5 +1,6 @@
 #ifndef LIBSUO_SUO_H
 #define LIBSUO_SUO_H
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <complex.h>
@@ -19,6 +20,7 @@ typedef int16_t cs16_t[2];
 
 // Data type to represent single bits. Contains a value 0 or 1.
 typedef uint8_t bit_t;
+typedef uint8_t byte_t;
 
 /* Data type to represent soft decision bits.
  * 0 = very likely '0', 255 = very likely '1'.
@@ -54,54 +56,19 @@ struct any_code {
 };
 
 
-/* Flags to indicate that a metadata field is used */
-#define METADATA_ID 1
-#define METADATA_FLAGS 2
-#define METADATA_TIME 4
-#define METADATA_MODE 0x10
-#define METADATA_POWER 0x20
-#define METADATA_CFO 0x40
-#define METADATA_BER 0x80
-#define METADATA_SER 0x100
-#define METADATA_0 0x200
-#define METADATA_1 0x400
-#define METADATA_2 0x800
-#define METADATA_3 0x1000
-#define METADATA_4 0x2000
-#define METADATA_5 0x4000
-#define METADATA_LEN 0x8000
-
 /* Flag to prevent transmission of a frame if it's too late,
  * i.e. if the timestamp is already in the past */
-#define METADATA_NO_LATE 0x40000
+#define SUO_FLAGS_NO_LATE 0x40000
 
-/* Metadata for received and transmitted frames */
-struct metadata {
-	/* Arbitrary identifier. Possible uses for it:
-	 * - As a topic over a ZeroMQ Pub-Sub socket
-	 * - Identifying a receiver or demodulator, in case frames from multiple
-	 *   receivers are sent to a single protocol stack or decoder */
-	uint32_t id;
-	/* Flag bits, as defined by macros starting with METADATA_.
-	 * Indicates which other fields are used or valid. */
-	uint32_t flags;
-	timestamp_t time; /* Timestamp (ns) */
-	uint32_t mode; /* Modem-specific modulation and coding flags */
-	float power; /* Received signal strength or transmit power (dB?) */
-	float cfo; /* Frequency offset (Hz) */
-	float ber; /* Bit error rate of decoded frame */
-	float ser; /* Octet or symbol error rate of decoded frame */
-	/* Other modem- or coding-specific metadata */
-	float extra[6];
-	/* Length of the data field */
-	uint32_t len;
-};
 
+#include "metadata.h"
 
 // Frame together with metadata
 struct frame {
-	struct metadata m; // Metadata
-	//uint32_t len; // Length of the data field
+	struct metadata m[MAX_METADATA]; // Metadata
+	timestamp_t timestamp; // Current time
+	uint32_t len; // Length of the data field
+	uint32_t flags;
 	uint8_t data[]; // Data (can be bytes, bits, symbols or soft bits)
 };
 

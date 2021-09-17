@@ -1,3 +1,4 @@
+#if 0
 #include "demod_fsk_corrbank.h"
 #include <string.h>
 #include <assert.h>
@@ -8,10 +9,10 @@
 
 #define NUM_CORRELATORS 8
 
-struct demod_fsk_corrbank_state {
+struct demod_fsk_corrbank {
 
 	/* configuration */
-	fsk_demod_corrbank_conf c;
+	struct fsk_demod_corrbank_conf c;
 
 	unsigned corr_len, corr_num;
 	const sample_t *corr_taps;
@@ -29,7 +30,9 @@ struct demod_fsk_corrbank_state {
 	void *out_arg;
 	void (*out_reset)(void *arg);
 	void (*out_bit)(void *arg, int bit);
-	struct deframer_code deframer;
+
+	//CALLBACK(decoder);
+	struct decoder_code deframer;
 	void *deframer_arg;
 };
 
@@ -91,19 +94,18 @@ static inline float mag2(sample_t v) {
 
 void *fskdemod_init(const void *conf) {
 	const struct fsk_demod_conf *c = conf;
-	struct fskdemod_state *st2;
-	st2 = malloc(sizeof(struct fskdemod_state));
+	struct demod_fsk_corrbank *self = malloc(sizeof(struct fskdemod_state));
 	memset(st2, 0, sizeof(struct fskdemod_state));
 
-	st2->corr_len = c->corr_len;
-	st2->corr_num = c->corr_num;
-	st2->corr_taps = c->corr_taps;
+	self->corr_len = c->corr_len;
+	self->corr_num = c->corr_num;
+	self->corr_taps = c->corr_taps;
 
-	st2->l_nco = nco_crcf_create(LIQUID_NCO);
-	st2->l_win = windowcf_create(st2->corr_len);
-	unsigned i;
-	for(i=0; i<st2->corr_num; i++)
-		st2->correlators[i] = dotprod_cccf_create((sample_t*)st2->corr_taps + st2->corr_len*i, st2->corr_len);
+	self->l_nco = nco_crcf_create(LIQUID_NCO);
+	self->l_win = windowcf_create(self->corr_len);
+
+	for(unsigned i=0; i<self->corr_num; i++)
+		self->correlators[i] = dotprod_cccf_create((sample_t*)self->corr_taps + self->corr_len*i, self->corr_len);
 
 #if 0 // TODO
 	/*
@@ -121,18 +123,18 @@ void *fskdemod_init(const void *conf) {
 #endif
 
 	/* TODO: find out neat way to change deframer and have the choice as parameter */
-	st2->out_arg = deframer_init();
-	st2->out_reset = deframer_reset;
-	st2->out_bit = deframer_bit;
+	self->out_arg = deframer_init();
+	self->out_reset = deframer_reset;
+	self->out_bit = deframer_bit;
 
 	return st2;
 }
 
 
 int fskdemod_reset(void *state, float freqoffset) {
-	struct fskdemod_state *st = state;
-	st->running = 1;
-	st->symphase = 0;
+	struct fskdemod_state *self = state;
+	self->running = 1;
+	self->symphase = 0;
 	//st->freqoffset = freqoffset;
 	nco_crcf_set_phase(st->l_nco, 0);
 	nco_crcf_set_frequency(st->l_nco, -freqoffset);
@@ -183,8 +185,7 @@ const struct demod_fsk_corrbank_conf demod_fsk_corrbank_defaults = {
 	.symbolrate = 9600,
 	.centerfreq = 100000,
 	.syncword = 0x36994625,
-	.synclen = 32,
-	.framelen = 800
+	.synclen = 32
 };
 
 CONFIG_BEGIN(demod_fsk_corrbank)
@@ -193,11 +194,10 @@ CONFIG_F(symbolrate)
 CONFIG_F(centerfreq)
 CONFIG_I(syncword)
 CONFIG_I(synclen)
-CONFIG_I(framelen)
 CONFIG_END()
 
 
-const struct receiver_code demod_fsk_mfilt_code = {
+const struct receiver_code demod_fsk_corrbank_code = {
 	.name = "demod_fsk_corrbank",
 	.init = demod_fsk_corrbank_init,
 	.destroy = demod_fsk_corrbank_destroy,
@@ -206,3 +206,4 @@ const struct receiver_code demod_fsk_mfilt_code = {
 	.set_callbacks = demod_fsk_corrbank_set_callbacks,
 	.execute = demod_fsk_corrbank_execute
 };
+#endif

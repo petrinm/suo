@@ -1,9 +1,9 @@
 /*
- * (G)FSK/MSK modulator
+ * (G)FSK modulator
  */
 
-#ifndef LIBSUO_SIMPLE_TRANSMITTER_H
-#define LIBSUO_SIMPLE_TRANSMITTER_H
+#ifndef __LIBSUO_MOD_FSK_H__
+#define __LIBSUO_MOD_FSK_H__
 
 #include "suo.h"
 
@@ -16,7 +16,7 @@ struct mod_fsk_conf {
 	float symbolrate;
 
 	/* Number of bit in one symbol (symbol complexity) */
-	//unsigned bits_per_symbol;
+	unsigned bits_per_symbol;
 
 	/* Center frequency */
 	float centerfreq;
@@ -31,4 +31,4 @@ struct mod_fsk_conf {
 /* Modulator descriptor */
 extern const struct transmitter_code mod_fsk_code;
 
-#endif
+#endif /* __LIBSUO_MOD_FSK_H__ */

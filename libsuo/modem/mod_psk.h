@@ -19,6 +19,6 @@ struct mod_psk_conf {
 	float centerfreq;
 };
 
-extern const struct transmitter_code mod_psk;
+extern const struct transmitter_code mod_psk_code;
 
 #endif /* LIBSUO_MOD_PSK_H */

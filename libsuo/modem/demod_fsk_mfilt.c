@@ -12,20 +12,18 @@
 
 static const float pi2f = 6.283185307179586f;
 
-struct fsk_demod_mfilt {
+struct demod_fsk_mfilt {
 	/* Configuration */
 	struct fsk_demod_mfilt_conf c;
 
 	//float resamprate;
 	unsigned resampint;
-	uint64_t syncmask;
 	float nco_1Hz, afc_speed;
 
 	/* Deframer state */
-	//uint32_t total_samples;
 	uint64_t latest_bits;
 	unsigned framepos, totalbits;
-	bool receiving_frame;
+	bool receiver_lock;
 
 	/* AFC state */
 	float freq_min, freq_max, freq_center, freq_adj;
@@ -90,9 +88,6 @@ static void *demod_fsk_mfilt_init(const void *conf_v)
 	memset(self, 0, sizeof(struct demod_fsk_mfilt));
 	c = self->c = *(const struct fsk_demod_mfilt_conf *)conf_v;
 
-	self->syncmask = (1ULL << c.synclen) - 1;
-	self->framepos = c.framelen;
-
 	/* Configure a resampler for a fixed oversampling ratio */
 	float resamprate = c.symbolrate * OVERSAMPLING / c.samplerate;
 	self->l_resamp = resamp_crcf_create(resamprate, 25, 0.4f / OVERSAMPLING, 60.0f, 32);
@@ -104,9 +99,9 @@ static void *demod_fsk_mfilt_init(const void *conf_v)
 	 * Limit AFC range to half of symbol rate to keep it
 	 * from wandering too far */
 	self->nco_1Hz = pi2f / c.samplerate;
-	self->freq_min = self->nco_1Hz * (c.centerfreq - 0.5f*c.symbolrate);
-	self->freq_max = self->nco_1Hz * (c.centerfreq + 0.5f*c.symbolrate);
-	self->freq_center = self->nco_1Hz * c.centerfreq;
+	self->freq_min = self->nco_1Hz * (c.center_freq - 0.5f*c.symbolrate);
+	self->freq_max = self->nco_1Hz * (c.center_freq + 0.5f*c.symbolrate);
+	self->freq_center = self->nco_1Hz * c.center_freq;
 	self->l_nco = nco_crcf_create(LIQUID_NCO);
 	/* afc_speed is maximum adjustment of frequency per input sample.
 	 * Convert Hz/sec into it. */
@@ -130,63 +125,6 @@ static int demod_fsk_mfilt_destroy(void *arg)
 	/* TODO (low priority since memory gets freed in the end anyway) */
 	(void)arg;
 	return 0;
-}
-
-
-static void simple_deframer_execute(struct demod_fsk_mfilt *self, unsigned bit, timestamp_t time)
-{
-	unsigned framepos = self->framepos;
-	const unsigned framelen = self->c.framelen;
-	bool receiving_frame = self->receiving_frame;
-
-	if(framepos < framelen) {
-		self->frame.data[framepos] = bit ? 0xFF : 0;
-		framepos++;
-		if(framepos == framelen) {
-			self->frame.m.len = framelen;
-			self->output.frame(self->output_arg, &self->frame);
-			receiving_frame = 0;
-		}
-	} else {
-		receiving_frame = 0;
-	}
-
-	/* Look for syncword */
-	uint64_t latest_bits = self->latest_bits;
-	latest_bits <<= 1;
-	latest_bits |= bit;
-	self->latest_bits = latest_bits;
-
-	/* Don't look for new syncword inside a frame */
-	if (!receiving_frame) {
-		unsigned syncerrs = __builtin_popcountll((latest_bits & self->syncmask) ^ self->c.syncword);
-
-		if(syncerrs <= 3) {
-			/* Syncword found, start saving bits when next bit arrives */
-			framepos = 0;
-			receiving_frame = 1;
-
-			self->frame.timestamp = time;
-
-			/* Fill in some metadata at start of the frame */
-			self->frame.m.cfo = (nco_crcf_get_frequency(self->l_nco) - self->freq_center ) / self->nco_1Hz;
-			self->frame.m.power = 10.0f * log10f(self->est_power);
-			self->frame.m.ber = (float)syncerrs;
-
-			float cfo = (nco_crcf_get_frequency(self->l_nco) - self->freq_center ) / self->nco_1Hz;
-			SET_METADATA_F(self->frame, METADATA_CFO, cfo);
-			float rssi = 10.0f * log10f(self->est_power);
-			SET_METADATA_F(self->frame, METADATA_RSSI, rssi);
-			SET_METADATA_I(self->frame, METADATA_SYNC_ERRORS, syncerrs);
-
-
-		}
-	}
-
-	self->receiving_frame = receiving_frame;
-	self->framepos = framepos;
-
-	self->totalbits++;
 }
 
 
@@ -217,8 +155,6 @@ static int demod_fsk_mfilt_execute(void *arg, const sample_t *samples, size_t ns
 
 		/* Process output from the resampler one sample at a time */
 		for(si2 = 0; si2 < nsamp2; si2++) {
-			float synchronized = 0;
-			unsigned nsynchronized = 0;
 			sample_t s2 = samples2[si2];
 
 			/*   Demodulation
@@ -245,9 +181,10 @@ static int demod_fsk_mfilt_execute(void *arg, const sample_t *samples, size_t ns
 			firfilt_rrrf_execute(self->l_eqfir, &demod);
 
 
-			/*   AFC
-			 ----------*/
-			if(!self->receiving_frame) {
+			/*
+			 * Tune the AFC (Automatic Frequency Correction)
+			 */
+			if(!self->receiver_lock) {
 				float adjustment = demod * self->afc_speed;
 
 				float freq_now = nco_crcf_get_frequency(self->l_nco);
@@ -268,10 +205,12 @@ static int demod_fsk_mfilt_execute(void *arg, const sample_t *samples, size_t ns
 			 * When the output of the comb filter peaks, take a symbol.
 			 * When a frame is detected, keep timing free running
 			 * for rest of the frame. */
+			unsigned synced = 0;
+			float synced_sample = 0;
+
 			unsigned ss_p = self->ss_p;
 			const float comb_prev = self->ss_comb[ss_p];
-			const float comb_prev2
-			= self->ss_comb[(ss_p+OVERSAMPLING-1) % OVERSAMPLING];
+			const float comb_prev2 = self->ss_comb[(ss_p+OVERSAMPLING-1) % OVERSAMPLING];
 			ss_p = (ss_p+1) % OVERSAMPLING;
 			float comb = self->ss_comb[ss_p];
 
@@ -280,17 +219,16 @@ static int demod_fsk_mfilt_execute(void *arg, const sample_t *samples, size_t ns
 			self->ss_comb[ss_p] = comb;
 			self->ss_p = ss_p;
 
-
-			if(!self->receiving_frame) {
+			if (!self->receiver_lock) {
 				if(comb_prev > comb && comb_prev > comb_prev2) {
-					nsynchronized = 1;
-					synchronized = self->demod_prev;
+					synced = 1;
+					synced_sample = self->demod_prev;
 					self->ss_ps = (ss_p+OVERSAMPLING-1) % OVERSAMPLING;
 				}
 			} else {
 				if(ss_p == self->ss_ps) {
-					nsynchronized = 1;
-					synchronized = demod;
+					synced = 1;
+					synced_sample = demod;
 				}
 			}
 
@@ -302,23 +240,33 @@ static int demod_fsk_mfilt_execute(void *arg, const sample_t *samples, size_t ns
 			float asdf = nco_crcf_get_frequency(self->l_nco);
 			write(3, &asdf, sizeof(float));
 			write(3, &comb, sizeof(float));
-			write(3, &synchronized, sizeof(float));
+			write(3, &synced_sample, sizeof(float));
 #endif
-
 
 			/* Decisions and deframing
 			 * ----------------------- */
-			if(nsynchronized == 1) {
+			if (synced == 1) {
 				/* Process one output symbol from synchronizer */
-				bool decision;
+				bit_t decision = (synced_sample >= 0) ? 1 : 0;
+				//if (self->deframer->execute(self, decision, timestamp)) {
+				if (0) {
 
-				if(synchronized >= 0)
-					decision = 1;
-				else
-					decision = 0;
+					/* If this was the first sync, collect store some metadata. */
+					if (self->receiver_lock == false) {
+						float cfo = (nco_crcf_get_frequency(self->l_nco) - self->freq_center) / self->nco_1Hz;
+						float rssi = 10.0f * log10f(self->est_power);
+						SET_METADATA_F(&self->frame, METADATA_POWER, cfo);
+						SET_METADATA_F(&self->frame, METADATA_RSSI, rssi);
+					}
 
-				simple_deframer_execute(self, decision, timestamp);
+					self->receiver_lock = true;
+				}
+				else {
+					/* No sync, no lock */
+					self->receiver_lock = false;
+				}
 			}
+
 			self->demod_prev = demod;
 		}
 		timestamp += sample_ns;
@@ -341,21 +289,15 @@ static int demod_fsk_mfilt_set_callbacks(void *arg, const struct rx_output_code 
 const struct fsk_demod_mfilt_conf fsk_demod_mfilt_defaults = {
 	.samplerate = 1e6,
 	.symbolrate = 9600,
-	//.bits_per_symbol = 2,
-	.centerfreq = 100000,
-	.syncword = 0x36994625,
-	.synclen = 32,
-	.framelen = 800
+	.bits_per_symbol = 2,
+	.center_freq = 100000,
 };
 
 CONFIG_BEGIN(fsk_demod_mfilt)
 CONFIG_F(samplerate)
 CONFIG_F(symbolrate)
-//CONFIG_I(bits_per_symbol)
-CONFIG_F(centerfreq)
-CONFIG_I(syncword)
-CONFIG_I(synclen)
-CONFIG_I(framelen)
+CONFIG_I(bits_per_symbol)
+CONFIG_F(center_freq)
 CONFIG_END()
 
 
@@ -365,6 +307,6 @@ const struct receiver_code demod_fsk_mfilt_code = {
 	.destroy = demod_fsk_mfilt_destroy,
 	.init_conf = init_conf, // Constructed by CONFIG-macro
 	.set_conf = set_conf, // Constructed by CONFIG-macro
-	.set_callbacks = fsk_demod_mfilt_set_callbacks,
-	.exectue = fsk_demod_mfilt_execute
+	.set_callbacks = demod_fsk_mfilt_set_callbacks,
+	.execute = demod_fsk_mfilt_execute
 };

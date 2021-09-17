@@ -1,6 +1,6 @@
 /* Transmitter for phase-shift keying.
  * Currently developed to transmit TETRA PI/4 DQPSK. */
-#include "psk_transmitter.h"
+#include "mod_psk.h"
 #include "suo_macros.h"
 #include "ddc.h"
 #include <stdlib.h>
@@ -14,9 +14,9 @@
 
 enum frame_state { FRAME_NONE, FRAME_WAIT, FRAME_TX };
 
-struct psk_transmitter {
+struct mod_psk {
 	/* Configuration */
-	struct psk_transmitter_conf c;
+	struct mod_psk_conf c;
 	timestamp_t mf_delay_ns;
 	float sample_ns;
 
@@ -41,18 +41,51 @@ struct psk_transmitter {
 };
 
 
-static void get_next_frame(struct psk_transmitter *self, timestamp_t timenow, timestamp_t time_end)
+
+static void* mod_psk_init(const void *conf_v)
+{
+	struct mod_psk* self = calloc(1, sizeof(*self));
+	if(self == NULL) return NULL;
+	self->c = *(const struct mod_psk_conf*)conf_v;
+
+	// sample rate for the modulator
+	float fs_mod = self->c.symbolrate * OVERSAMP;
+	self->sample_ns = 1.0e9f / fs_mod;
+	self->duc = suo_ddc_init(fs_mod, self->c.samplerate, self->c.centerfreq, 1);
+
+	// design the matched filter
+#define MFDELAY (3)
+#define MFTAPS (MFDELAY*OVERSAMP*2+1)
+	float taps[MFTAPS];
+	liquid_firdes_rrcos(OVERSAMP, MFDELAY, 0.35, 0, taps);
+	self->l_mf = firfilt_crcf_create(taps, MFTAPS);
+	self->mf_delay_ns = self->sample_ns * (MFDELAY*OVERSAMP);
+
+
+	//self->l_mod = modem_create(LIQUID_MODEM_PSK2);
+
+	// For initial testing:
+
+	return self;
+}
+
+static int mod_psk_destroy(void *arg)
+{
+	(void)arg;
+	return 0;
+}
+
+static void get_next_frame(struct mod_psk *self, timestamp_t timenow, timestamp_t time_end)
 {
 	if (self->state == FRAME_NONE) {
-		int fl = self->input->get_frame(self->input_arg,
-			&self->frame, FRAMELEN_MAX, time_end);
+		int fl = self->input->get_frame(self->input_arg, &self->frame, FRAMELEN_MAX, time_end);
 		if (fl >= 0) {
-			if (self->frame.m.flags & METADATA_TIME) {
+			if (self->frame.timestamp != 0) { // valid time?
 				self->state = FRAME_WAIT;
-				int64_t timediff = timenow - self->frame.m.time;
+				int64_t timediff = timenow - self->frame.timestamp;
 				if (timediff > 0) {
 					fprintf(stderr, "Warning: TX frame late by %ld ns\n", timediff);
-					if (self->frame.m.flags & METADATA_NO_LATE)
+					if (self->frame.flags & SUO_FLAGS_NO_LATE)
 						self->state = FRAME_NONE;
 				}
 			} else {
@@ -63,10 +96,10 @@ static void get_next_frame(struct psk_transmitter *self, timestamp_t timenow, ti
 }
 
 
-static tx_return_t execute(void *arg, sample_t *samples, size_t maxsamples, timestamp_t timestamp)
+static tx_return_t mod_psk_execute(void *arg, sample_t *samples, size_t maxsamples, timestamp_t timestamp)
 {
 	const float pi_4f = 0.7853981633974483f;
-	struct psk_transmitter *self = arg;
+	struct mod_psk *self = arg;
 
 	timestamp += self->mf_delay_ns;
 	size_t buflen = suo_duc_in_size(self->duc, maxsamples, &timestamp);
@@ -91,11 +124,11 @@ static tx_return_t execute(void *arg, sample_t *samples, size_t maxsamples, time
 		timestamp_t timenow = timestamp + (timestamp_t)(sample_ns * i);
 		if (self->state == FRAME_WAIT) {
 			/* Frame is waiting to be transmitted */
-			int64_t timediff = timenow - self->frame.m.time;
+			int64_t timediff = timenow - self->frame.timestamp;
 			if (timediff >= 0) {
 				self->state = FRAME_TX;
 				symph = 0;
-				//fprintf(stderr, "%lu: Starting transmission\n", self->frame.m.time);
+				//fprintf(stderr, "%lu: Starting transmission\n", self->frame.timestamp);
 			}
 		}
 		if (self->state == FRAME_TX && symph == 0) {
@@ -115,7 +148,7 @@ static tx_return_t execute(void *arg, sample_t *samples, size_t maxsamples, time
 			s = (cosf(pi_4f * pskph) + I*sinf(pi_4f * pskph)) * amp;
 
 			framepos += 2;
-			if (framepos+1 >= self->frame.m.len) {
+			if (framepos+1 >= self->frame.len) {
 				framepos = 0;
 				self->state = FRAME_NONE;
 				get_next_frame(self, timestamp, time_end);
@@ -137,60 +170,36 @@ static tx_return_t execute(void *arg, sample_t *samples, size_t maxsamples, time
 }
 
 
-static void *init(const void *conf_v)
+
+static int mod_psk_set_callbacks(void *arg, const struct tx_input_code *input, void *input_arg)
 {
-	struct psk_transmitter *self;
-	self = calloc(1, sizeof(*self));
-	if(self == NULL)
-		return NULL;
-	self->c = *(const struct psk_transmitter_conf*)conf_v;
-
-	// sample rate for the modulator
-	float fs_mod = self->c.symbolrate * OVERSAMP;
-	self->sample_ns = 1.0e9f / fs_mod;
-	self->duc = suo_ddc_init(fs_mod, self->c.samplerate, self->c.centerfreq, 1);
-
-	// design the matched filter
-#define MFDELAY (3)
-#define MFTAPS (MFDELAY*OVERSAMP*2+1)
-	float taps[MFTAPS];
-	liquid_firdes_rrcos(OVERSAMP, MFDELAY, 0.35, 0, taps);
-	self->l_mf = firfilt_crcf_create(taps, MFTAPS);
-	self->mf_delay_ns = self->sample_ns * (MFDELAY*OVERSAMP);
-
-	// For initial testing:
-
-	return self;
-}
-
-
-static int set_callbacks(void *arg, const struct tx_input_code *input, void *input_arg)
-{
-	struct psk_transmitter *self = arg;
+	struct mod_psk *self = arg;
 	self->input = input;
 	self->input_arg = input_arg;
 	return 0;
 }
 
 
-static int destroy(void *arg)
-{
-	(void)arg;
-	return 0;
-}
 
-
-const struct psk_transmitter_conf psk_transmitter_defaults = {
+const struct mod_psk_conf mod_psk_defaults = {
 	.samplerate = 1e6,
 	.symbolrate = 18000,
 	.centerfreq = 100000
 };
 
 
-CONFIG_BEGIN(psk_transmitter)
+CONFIG_BEGIN(mod_psk)
 CONFIG_F(samplerate)
 CONFIG_F(symbolrate)
 CONFIG_F(centerfreq)
 CONFIG_END()
 
-const struct transmitter_code psk_transmitter_code = { "psk_transmitter", init, destroy, init_conf, set_conf, set_callbacks, execute };
+const struct transmitter_code mod_psk_code = {
+	.name = "mod_psk",
+	.init = mod_psk_init,
+	.destroy = mod_psk_destroy,
+	.init_conf = init_conf, // Generate by the CONFIG-macro
+	.set_conf = set_conf, // Generate by the CONFIG-macro
+	.set_callbacks = mod_psk_set_callbacks,
+	.execute = mod_psk_execute
+};

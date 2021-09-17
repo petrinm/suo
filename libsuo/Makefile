@@ -1,4 +1,4 @@
-ENABLE_ALSA ?= 1
+#ENABLE_ALSA ?= 1
 
 CC = gcc
 CFLAGS =
@@ -8,7 +8,7 @@ CFLAGS += -std=gnu11 -fcx-limited-range
 CFLAGS += -O3 -march=native
 CFLAGS += -I.
 
-DSP_SRCS = dsp_modules.c $(wildcard modem/*.c coding/*.c)
+DSP_SRCS = dsp_modules.c metadata.c $(wildcard modem/*.c coding/*.c framing/*.c)
 DSP_OBJS = $(addprefix $(BUILD)/,$(DSP_SRCS:.c=.o))
 
 IO_SRCS = io_modules.c $(wildcard frame-io/*.c signal-io/*.c)

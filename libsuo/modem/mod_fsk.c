@@ -46,11 +46,13 @@ static void* mod_fsk_init(const void *conf_v)
 	self->symrate = 4294967296.0f * self->c.symbolrate / samplerate;
 	self->sample_ns = 1.0e9f / samplerate;
 
-	const float deviation = pi2f * self->c.modindex * 0.5f * self->c.symbolrate / samplerate
-	const float cf = pi2f * self->c.centerfreq / samplerate;
-	self->freq0 = cf - deviation;
-	self->freq1 = cf + deviation;
-
+	/*
+	 * Init NCO for FSK generating
+	 */
+ 	const float deviation = pi2f * self->c.modindex * 0.5f * self->c.symbolrate / samplerate;
+ 	const float cf = pi2f * self->c.centerfreq / samplerate;
+ 	self->freq0 = cf - deviation;
+ 	self->freq1 = cf + deviation;
 	self->l_nco = nco_crcf_create(LIQUID_NCO);
 
 	return self;
@@ -90,7 +92,10 @@ static tx_return_t mod_fsk_execute(void *arg, sample_t *samples, size_t maxsampl
 	unsigned framelen = self->framelen, framepos = self->framepos;
 	uint32_t symphase = self->symphase;
 
-	if (!transmitting) {
+	if (transmitting == 0) {
+		/*
+		 * Idle (check for now incoming frames)
+		 */
 		const timestamp_t time_end = timestamp + (timestamp_t)(self->sample_ns * maxsamples);
 		int ret = self->input.get_frame(self->input_arg, &self->frame, FRAMELEN_MAX, time_end);
 		if (ret > 0) {
@@ -101,13 +106,23 @@ static tx_return_t mod_fsk_execute(void *arg, sample_t *samples, size_t maxsampl
 		}
 	}
 
-	if (transmitting == 1 && (int64_t)(timestamp - self->frame.m.time) >= 0)
-		transmitting = 2;
+	if (transmitting == 1) {
+		/*
+		 * Waiting for transmitting time
+		 */
+		if ((int64_t)(timestamp - self->frame.timestamp) >= 0)
+			transmitting = 2;
+
+	}
 
 	if (transmitting == 2) {
+		/*
+		 * Transmitting/generating samples
+		 */
+
 		size_t si;
 		for(si = 0; si < maxsamples; si++) {
-			float f_in = freq0;
+			float f_in = freq0; // cf  - deviation * s;
 			if(framepos < framelen) {
 				if(framebuf[framepos]) f_in = freq1;
 			} else {
@@ -139,7 +154,7 @@ static tx_return_t mod_fsk_execute(void *arg, sample_t *samples, size_t maxsampl
 const struct mod_fsk_conf mod_fsk_defaults = {
 	.samplerate = 1e6,
 	.symbolrate = 9600,
-	//.bits_per_symbol = 2,
+	.bits_per_symbol = 2,
 	.centerfreq = 100000,
 	.modindex = 0.5,
 	.bt = 0.5
@@ -149,13 +164,13 @@ const struct mod_fsk_conf mod_fsk_defaults = {
 CONFIG_BEGIN(mod_fsk)
 CONFIG_F(samplerate)
 CONFIG_F(symbolrate)
-//CONFIG_I(bits_per_symbol)
+CONFIG_I(bits_per_symbol)
 CONFIG_F(centerfreq)
 CONFIG_F(modindex)
 CONFIG_F(bt)
 CONFIG_END()
 
-const struct transmitter_code mod_fsk = {
+const struct transmitter_code mod_fsk_code = {
 	.name = "mod_fsk",
 	.init = mod_fsk_init,
 	.destroy = mod_fsk_destroy,
