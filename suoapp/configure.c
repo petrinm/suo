@@ -1,4 +1,6 @@
+#include "suoapp.h"
 #include "configure.h"
+#include <assert.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -81,6 +83,7 @@ const void *select_code(const struct any_code **list, FILE *f, const char *what)
 	}
 
 	while (list[i] != NULL) {
+		assert(list[i]->name);
 		if (strcmp(list[i]->name, line) == 0) {
 			fprintf(stderr, "Selected %s %s\n", what, list[i]->name);
 			return list[i];

@@ -1,4 +1,5 @@
 #include "suo.h"
+#include "suoapp.h"
 #include "configure.h"
 
 #include <string.h>
