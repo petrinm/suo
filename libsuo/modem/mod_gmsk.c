@@ -135,7 +135,7 @@ static tx_return_t mod_gmsk_execute(void *arg, sample_t *samples, size_t max_sam
 		/*
 		 * Waiting for transmitting time
 		 */
-		if ((int64_t)(timestamp - self->frame->timestamp) >= 0)
+		if ((int64_t)(timestamp - self->frame->hdr.timestamp) >= 0)
 			self->transmitting = 2;
 	}
 

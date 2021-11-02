@@ -80,12 +80,13 @@ static void get_next_frame(struct mod_psk *self, timestamp_t timenow, timestamp_
 	if (self->state == FRAME_NONE) {
 		int fl = self->input->get_frame(self->input_arg, &self->frame, FRAMELEN_MAX, time_end);
 		if (fl >= 0) {
-			if (self->frame.timestamp != 0) { // valid time?
+			struct frame_header* hdr = &self->frame.hdr;
+			if (hdr->timestamp != 0) { // valid time?
 				self->state = FRAME_WAIT;
-				int64_t timediff = timenow - self->frame.timestamp;
+				int64_t timediff = timenow - hdr->timestamp;
 				if (timediff > 0) {
 					fprintf(stderr, "Warning: TX frame late by %ld ns\n", timediff);
-					if (self->frame.flags & SUO_FLAGS_NO_LATE)
+					if (hdr->flags & SUO_FLAGS_NO_LATE)
 						self->state = FRAME_NONE;
 				}
 			} else {
@@ -124,7 +125,7 @@ static tx_return_t mod_psk_execute(void *arg, sample_t *samples, size_t maxsampl
 		timestamp_t timenow = timestamp + (timestamp_t)(sample_ns * i);
 		if (self->state == FRAME_WAIT) {
 			/* Frame is waiting to be transmitted */
-			int64_t timediff = timenow - self->frame.timestamp;
+			int64_t timediff = timenow - self->frame.hdr.timestamp;
 			if (timediff >= 0) {
 				self->state = FRAME_TX;
 				symph = 0;
@@ -148,7 +149,7 @@ static tx_return_t mod_psk_execute(void *arg, sample_t *samples, size_t maxsampl
 			s = (cosf(pi_4f * pskph) + I*sinf(pi_4f * pskph)) * amp;
 
 			framepos += 2;
-			if (framepos+1 >= self->frame.len) {
+			if (framepos+1 >= self->frame.data_len) {
 				framepos = 0;
 				self->state = FRAME_NONE;
 				get_next_frame(self, timestamp, time_end);

@@ -133,25 +133,25 @@ static int golay_framer_execute(void *arg, const struct frame *frame, bit_t* out
 
 	/* Calculate Reed Solomon */
 	if (self->c.use_rs) {
-		fec_encode(self->l_rs, frame->len, (unsigned char*)frame->data, self->data_buffer);
+		fec_encode(self->l_rs, frame->data_len, (unsigned char*)frame->data, self->data_buffer);
 	}
 	else {
-		memcpy(self->data_buffer, frame->data, frame->len);
+		memcpy(self->data_buffer, frame->data, frame->data_len);
 	}
 
 	/* Scrambler the bytes */
 	if (self->c.use_randomizer) {
-		for (size_t i = 0; i < frame->len; i++)
+		for (size_t i = 0; i < frame->data_len; i++)
 			self->data_buffer[i] ^= ccsds_randomizer[i];
 	}
 
 	/* Viterbi decode all bits */
 	if (self->c.use_viterbi) {
-		fec_encode(self->l_viterbi, frame->len, self->data_buffer, self->viterbi_buffer);
-		bit_ptr += bytes_to_bits(bit_ptr, 2 * payload_len, self->viterbi_buffer, 1);
+		fec_encode(self->l_viterbi, frame->data_len, self->data_buffer, self->viterbi_buffer);
+		bit_ptr += bytes_to_bits(bit_ptr, 2 * 8 * payload_len, self->viterbi_buffer, 1);
 	}
 	else {
-		bit_ptr += bytes_to_bits(bit_ptr, payload_len, self->data_buffer, 1);
+		bit_ptr += bytes_to_bits(bit_ptr, 8 * payload_len, self->data_buffer, 1);
 	}
 
 	size_t total_bits = (size_t)(bit_ptr - out);

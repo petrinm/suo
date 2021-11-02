@@ -110,7 +110,7 @@ static tx_return_t mod_fsk_execute(void *arg, sample_t *samples, size_t maxsampl
 		/*
 		 * Waiting for transmitting time
 		 */
-		if ((int64_t)(timestamp - self->frame.timestamp) >= 0)
+		if ((int64_t)(timestamp - self->frame.hdr.timestamp) >= 0)
 			transmitting = 2;
 
 	}

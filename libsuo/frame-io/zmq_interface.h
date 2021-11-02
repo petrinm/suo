@@ -24,6 +24,10 @@ struct zmq_tx_input_conf {
 	uint32_t flags;
 };
 
+
+int zmq_send_frame(void* sock, struct frame *frame);
+int zmq_recv_frame(void* sock, struct frame *frame);
+
 extern const struct zmq_rx_output_conf zmq_rx_output_defaults;
 extern const struct zmq_tx_input_conf zmq_tx_input_defaults;
 

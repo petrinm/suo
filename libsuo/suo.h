@@ -61,29 +61,32 @@ struct any_code {
 #define SUO_FLAGS_NO_LATE 0x40000
 
 
+#include "suo_interface.h"
 #include "metadata.h"
+
+struct frame_header {
+	uint32_t id;
+	uint32_t flags;
+	timestamp_t timestamp; // Current time
+};
 
 // Frame together with metadata
 struct frame {
-	struct metadata m[MAX_METADATA]; // Metadata
-	timestamp_t timestamp; // Current time
-	uint32_t len; // Length of the data field
-	uint32_t flags;
-	uint8_t data[]; // Data (can be bytes, bits, symbols or soft bits)
+	struct frame_header hdr;    // Frame header field
+	struct metadata* metadata;  // Metadata
+	unsigned int metadata_len;  //
+	uint8_t* data; // Data (can be bytes, bits, symbols or soft bits)
+	unsigned int data_len;
+	unsigned int data_alloc_len;
 };
 
-
-// Timing and control messages
-struct timing {
-	uint32_t id;      // Arbitrary identifier
-	uint32_t flags;   // Unused
-	timestamp_t time; // Current time
-};
-
+#define SUO_CALLBACK(x)
 
 /* -----------------------------------------
  * Receive related interfaces and data types
  * ----------------------------------------- */
+struct rx_output_code;
+
 
 /* Interface to a frame decoder module */
 struct decoder_code {
@@ -93,11 +96,17 @@ struct decoder_code {
 	void *(*init_conf) (void);
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
+	int   (*set_frame_sink) (void *, const struct rx_output_code * sink, void *sink_arg);
+	//int   (*set_frame_source) (void *, const struct rx_output_code *source, void *source_arg);
+
 	/* Decode a frame.
 	 * Input frame data is soft decision bits,
 	 * output frame data is decoded data bytes.
 	 * Return negative value if decoding failed. */
-	int   (*decode)  (void *, const struct frame *in, struct frame *out, size_t maxlen);
+	//int   (*decode)  (void *, const struct frame *in, struct frame *out);
+
+	int   (*execute)  (void *, const struct frame *in, bit_t bit, timestamp_t now);
+	int(*execute_soft)(void *, const struct frame *in, bit_t bit, timestamp_t now);
 };
 
 
@@ -111,7 +120,7 @@ struct rx_output_code {
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
 	// Set callback to a decoder which is used to decode a frame
-	int   (*set_callbacks) (void *, const struct decoder_code *, void *decoder_arg);
+	int   (*set_frame_source) (void *, const struct decoder_code *, void *decoder_arg);
 
 	// Called by a receiver when a frame has been received
 	int   (*frame) (void *, const struct frame *frame);
@@ -133,7 +142,9 @@ struct receiver_code {
 	int   (*set_conf)      (void *conf, const char *parameter, const char *value);
 
 	// Set callback to an rx_output module which is called when a frame has been received
-	int   (*set_callbacks) (void *, const struct rx_output_code *, void *rx_output_arg);
+	int   (*set_symbol_sink) (void *, const struct decoder_code *, void *rx_output_arg);
+	//int   (*set_soft_symbol_sink) (void *, const struct decoder_code *, void *rx_output_arg);
+	//int   (*set_sample_source)(void*);
 
 	// Execute the receiver for a buffer of input signal
 	int   (*execute)       (void *, const sample_t *samp, size_t nsamp, timestamp_t timestamp);
@@ -144,7 +155,7 @@ struct receiver_code {
  * Transmit related interfaces and data types
  * ------------------------------------------ */
 
-
+struct tx_input_code;
 /* Interface to a frame encoder module */
 struct encoder_code {
 	const char *name;
@@ -152,6 +163,10 @@ struct encoder_code {
 	int   (*destroy)   (void *);
 	void *(*init_conf) (void);
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
+
+
+	//int   (*set_symbol_sink) (void *, const struct decoder_code *, void *rx_output_arg);
+	int   (*set_frame_source) (void *, const struct tx_input_code * source, void *arg);
 
 	/* Encode a frame.
 	 * Input is an array of data bytes,
@@ -171,7 +186,8 @@ struct tx_input_code {
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
 	// Set callback to a encoder which is used to encode a frame
-	int   (*set_callbacks) (void *, const struct encoder_code *, void *encoder_arg);
+	//int   (*set_callbacks) (void *, const struct encoder_code *, void *encoder_arg);
+	int   (*set_frame_sink) (void *, const struct encoder_code * sink, void *arg);
 
 	/* Called by a transmitter to request the next frame to be transmitted.
 	 * time_dl is a "deadline": if there is a frame to transmit
@@ -213,6 +229,8 @@ struct transmitter_code {
 
 	// Set callback to a tx_input module which provides frames to be transmitted
 	int   (*set_callbacks) (void *, const struct tx_input_code *, void *tx_input_arg);
+	int   (*set_symbol_sink) (void *, const struct tx_input_code *, void *tx_input_arg);
+
 
 	/* Generate a buffer of signal to be transmitted.
 	 * Timestamp points to the first sample in the buffer. */
@@ -237,36 +255,15 @@ struct signal_io_code {
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
 	// Set callbacks to a receiver and a transmitter
-	int   (*set_callbacks)(void *, const struct receiver_code *, void *receiver_arg, const struct transmitter_code *, void *transmitter_arg);
+	//int   (*set_callbacks)(void *, const struct receiver_code *, void *receiver_arg, const struct transmitter_code *, void *transmitter_arg);
+	int   (*set_sample_sink)(void *, const struct receiver_code *, void *receiver_arg);
+	int   (*set_sample_source)(void *, const struct transmitter_code *, void *transmitter_arg);
 
 	// The I/O "main loop"
 	int   (*execute)    (void *);
 };
 
 
-/* Everything combined */
-struct suo {
-	const struct receiver_code *receiver;
-	void *receiver_arg;
-
-	const struct transmitter_code *transmitter;
-	void *transmitter_arg;
-
-	const struct decoder_code *decoder;
-	void *decoder_arg;
-
-	const struct encoder_code *encoder;
-	void *encoder_arg;
-
-	const struct rx_output_code *rx_output;
-	void *rx_output_arg;
-
-	const struct tx_input_code *tx_input;
-	void *tx_input_arg;
-
-	const struct signal_io_code *signal_io;
-	void *signal_io_arg;
-};
 
 // List of all receivers
 extern const struct receiver_code *suo_receivers[];
@@ -283,11 +280,25 @@ extern const struct tx_input_code *suo_tx_inputs[];
 // List of all signal I/Os
 extern const struct signal_io_code *suo_signal_ios[];
 
+/* Allocate new frame object */
+struct frame* suo_frame_new(unsigned int data_len);
+
+void suo_frame_clear(struct frame* frame);
+
+/* Destroy */
+void suo_frame_destroy(struct frame* frame);
+
+
+#define SUO_PRINT_DATA      1
+#define SUO_PRINT_METADATA  2
+#define SUO_PRINT_COLOR     4
+#define SUO_PRINT_COMPACT   8
 
 /* Write samples somewhere for testing purposes.
  * Something like this could be useful for showing diagnostics
  * such as constellations in end applications as well,
  * so some more general way would be nice. */
 void print_samples(unsigned stream, sample_t *samples, size_t len);
+void suo_frame_print(struct frame* frame, unsigned int flags);
 
 #endif

@@ -14,6 +14,7 @@
 /* One global ZeroMQ context, initialized only once */
 void *zmq = NULL;
 
+
 static void print_fail_zmq(const char *function, int ret)
 {
 	fprintf(stderr, "%s failed (%d): %s\n", function, ret, zmq_strerror(errno));
@@ -39,10 +40,11 @@ struct zmq_output {
 	void *decoder_arg;
 };
 
+static int zmq_output_destroy(void *arg);
 static void *zmq_decoder_main(void*);
 
 
-static void *init(const void *confv)
+static void *zmq_output_init(const void *confv)
 {
 	const struct zmq_rx_output_conf *conf = confv;
 	struct zmq_output *self = calloc(1, sizeof(*self));
@@ -67,11 +69,12 @@ static void *init(const void *confv)
 	return self;
 
 fail: // TODO cleanup
+	zmq_output_destroy(self);
 	return NULL;
 }
 
 
-static int set_callbacks(void *arg, const struct decoder_code *decoder, void *decoder_arg)
+static int zmq_output_set_callbacks(void *arg, const struct decoder_code *decoder, void *decoder_arg)
 {
 	struct zmq_output *self = arg;
 	self->decoder = decoder;
@@ -103,7 +106,7 @@ fail:
 }
 
 
-static int destroy(void *arg)
+static int zmq_output_destroy(void *arg)
 {
 	struct zmq_output *self = arg;
 	if(self == NULL) return 0;
@@ -120,8 +123,8 @@ static void *zmq_decoder_main(void *arg)
 {
 	struct zmq_output *self = arg;
 
-	char decoded_buf[sizeof(struct frame) + DECODED_MAXLEN];
-	struct frame *decoded = (struct frame *)decoded_buf;
+	struct frame *coded = suo_frame_new(DECODED_MAXLEN);
+	struct frame *decoded = suo_frame_new(DECODED_MAXLEN);
 
 	/* Read frames from the receiver-to-decoder queue
 	 * transmit buffer queue. */
@@ -131,21 +134,17 @@ static void *zmq_decoder_main(void *arg)
 		zmq_msg_init(&input_msg);
 		nread = zmq_msg_recv(&input_msg, self->z_decr, 0);
 		if(nread >= 0) {
-			int ndecoded = self->decoder->decode(self->decoder_arg, zmq_msg_data(&input_msg), decoded, DECODED_MAXLEN);
-			if(ndecoded >= 0) {
-				ZMQCHECK(zmq_send(self->z_rx_pub, decoded, sizeof(struct frame) + ndecoded, 0));
-			} else {
-				/* Decode failed. TODO: send or save diagnostics somewhere */
-			}
 
-#if 0 // def PRINT_DIAGNOSTICS
-		const struct metadata *metadata = &decoded->m;
-			printf("%d  Timestamp: %lld ns   Mode: %u  CFO: %E Hz  RSSI: %6.2f dB\n\n",
-				ndecoded,
-				(long long)decoded->timestamp,
-				metadata->mode,
-				(double)metadata->cfo, (double)metadata->power);
-#endif
+			// TODO
+			//if (self->decoder->decode(self->decoder_arg, zmq_msg_data(&input_msg), decoded, DECODED_MAXLEN) < 0)
+			//	continue;
+
+			printf("Decoded:\n");
+			suo_frame_print(decoded, SUO_PRINT_DATA | SUO_PRINT_METADATA | SUO_PRINT_COLOR);
+
+			if (zmq_send_frame(self->z_rx_pub, decoded) < 0)
+				goto fail;
+
 		} else {
 			print_fail_zmq("zmq_recv", nread);
 			goto fail;
@@ -158,7 +157,8 @@ fail:
 }
 
 
-static int frame(void *arg, const struct frame *frame)
+
+static int zmq_output_frame(void *arg, const struct frame *frame)
 {
 	struct zmq_output *self = arg;
 
@@ -166,33 +166,30 @@ static int frame(void *arg, const struct frame *frame)
 	 * if decoder thread and its socket is not created */
 	void *s = self->z_decw;
 	if (s == NULL)
-		s = self->z_rx_pub;
+		s = self->z_rx_pub; // return -1;
 
-	/* Non-blocking send to avoid blocking the receiver in case
-	 * decoder runs out of CPU time and ZMQ buffer fills up.
-	 * Frames are just discarded with a warning message in the case. */
-	ZMQCHECK(zmq_send(s, frame, sizeof(struct frame) + frame->len, ZMQ_DONTWAIT));
-	return 0;
-fail:
-	return -1;
+	printf("dsasdsadsadsa\n");
+	return zmq_send_frame(s, frame);
 }
 
 
-static int tick(void *arg, timestamp_t timenow)
+/* Send a timing */
+static int zmq_output_tick(void *arg, timestamp_t timenow)
 {
 	struct zmq_output *self = arg;
 	void *s = self->z_tick_pub;
 	if (s == NULL)
-		goto fail;
+		return -1;
+
 	struct timing msg = {
-		.id = 2,
+		.id = SUO_ID_TIMING_MSG,
 		.flags = 0,
 		.time = timenow
 	};
 	ZMQCHECK(zmq_send(s, &msg, sizeof(msg), ZMQ_DONTWAIT));
 	return 0;
-fail:
-	return -1;
+fail: /* For ZMQCHECK macro */
+	return -2;
 }
 
 
@@ -208,4 +205,13 @@ CONFIG_C(address_tick)
 CONFIG_I(flags)
 CONFIG_END()
 
-const struct rx_output_code zmq_rx_output_code = { "zmq_output", init, destroy, init_conf, set_conf, set_callbacks, frame, tick };
+const struct rx_output_code zmq_rx_output_code = {
+	.name = "zmq_output",
+	.init = zmq_output_init,
+	.destroy = zmq_output_destroy,
+	.init_conf = init_conf,
+	.set_conf = set_conf,
+	//.set_callbacks = zmq_output_set_callbacks,
+	.frame = zmq_output_frame,
+	.tick = zmq_output_tick
+};

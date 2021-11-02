@@ -36,31 +36,34 @@
 #define METATYPE_TIME              5
 
 /* Metadata macros */
-#define SET_METADATA_F(frame, ident, val)   set_meta(frame, ident, METATYPE_FLOAT)->fl = val
-#define SET_METADATA_D(frame, ident, val)   set_meta(frame, ident, METATYPE_DOUBLE)->dl = val
-#define SET_METADATA_I(frame, ident, val)   set_meta(frame, ident, METATYPE_INT)->i = val
-#define SET_METADATA_UI(frame, ident, val)  set_meta(frame, ident, METATYPE_UINT)->i = val
+#define SET_METADATA_F(frame, ident, val)   set_metadata(frame, ident, METATYPE_FLOAT)->fl = val
+#define SET_METADATA_D(frame, ident, val)   set_metadata(frame, ident, METATYPE_DOUBLE)->dl = val
+#define SET_METADATA_I(frame, ident, val)   set_metadata(frame, ident, METATYPE_INT)->i = val
+#define SET_METADATA_UI(frame, ident, val)  set_metadata(frame, ident, METATYPE_UINT)->i = val
 
 /* Metadata struct */
 struct metadata {
 	struct {
-		unsigned len: 4;
-		unsigned type: 4;
-		unsigned ident: 16;
+		uint8_t len;
+		uint8_t type;
+		uint16_t ident;
 	};
 
 	union {
-		int i;
-		unsigned int ui;
+		int32_t i;
+		uint32_t ui;
 		float fl;
 		double dl;
-		//timestamp_t time;
+		timestamp_t time;
+		uint8_t raw[16];
 	};
 };
 
 struct frame;
 
-struct metadata* set_meta(struct frame* frame, unsigned ident, unsigned type);
+/*
+ */
+struct metadata* set_metadata(struct frame* frame, unsigned ident, unsigned type);
 
 void metadata_print(struct frame* frame);
 int metadata_dump(uint8_t* out);

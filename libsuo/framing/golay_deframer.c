@@ -12,7 +12,7 @@
 struct golay_deframer {
 	/* Configuration */
 	struct golay_deframer_conf c;
-	unsigned int sync_mask;
+	uint64_t sync_mask;
 
 	struct frame frame;
 	byte_t* data_buffer;
@@ -48,7 +48,7 @@ static void* golay_deframer_init(const void* conf_v) {
 	memset(self, 0, sizeof(struct golay_deframer));
 	self->c = *(const struct golay_deframer_conf *)conf_v;
 
-	self->sync_mask = (1 << self->c.sync_len) - 1;
+	self->sync_mask = (1ULL << self->c.sync_len) - 1;
 	self->data_buffer = malloc(2 * MAX_FRAME_LENGTH);
 
 	if (self->c.skip_rs == 0)
@@ -95,7 +95,7 @@ static int golay_deframer_execute(void *arg, unsigned bit, timestamp_t time)
 			self->latest_bits = 0;
 
 			//
-			self->frame.timestamp = time;
+			self->frame.hdr.timestamp = time;
 			SET_METADATA_I(&self->frame, METADATA_SYNC_ERRORS, sync_errors);
 
 			self->state = 1;
@@ -139,6 +139,7 @@ static int golay_deframer_execute(void *arg, unsigned bit, timestamp_t time)
 			if ((self->coded_len & 0x800) != 0)
 				self->frame_len *= 2;
 
+
 			printf("Frame length: %d\n", self->frame_len);
 
 			self->frame_pos = 0;
@@ -165,7 +166,7 @@ static int golay_deframer_execute(void *arg, unsigned bit, timestamp_t time)
 			self->bit_idx = 0;
 
 			if (self->frame_pos >= self->frame_len) {
-				self->frame.len = self->frame_len;
+				self->frame.data_len = self->frame_len;
 
 				if (self->c.skip_viterbi == 0 && (self->coded_len & 0x800) != 0) {
 					/* Decode viterbi */
@@ -175,7 +176,7 @@ static int golay_deframer_execute(void *arg, unsigned bit, timestamp_t time)
 
 				if (self->c.skip_randomizer == 0 && (self->coded_len & 0x400) != 0) {
 					/* Scrambler the bytes */
-					for (size_t i = 0; i < self->frame.len; i++)
+					for (size_t i = 0; i < self->frame.data_len; i++)
 						self->data_buffer[i] ^= ccsds_randomizer[i];
 				}
 

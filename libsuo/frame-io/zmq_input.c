@@ -40,11 +40,11 @@ struct zmq_input {
 };
 
 
-static int destroy(void *);
+static int zmq_input_destroy(void *);
 static void *zmq_encoder_main(void*);
 
 
-static void *init(const void *confv)
+static void *zmq_input_init(const void *confv)
 {
 	const struct zmq_tx_input_conf *conf = confv;
 	struct zmq_input *self = calloc(1, sizeof(*self));
@@ -73,12 +73,12 @@ static void *init(const void *confv)
 
 	return self;
 fail:
-	destroy(self);
+	zmq_input_destroy(self);
 	return NULL;
 }
 
 
-static int set_callbacks(void *arg, const struct encoder_code *encoder, void *encoder_arg)
+static int zmq_input_set_callbacks(void *arg, const struct encoder_code *encoder, void *encoder_arg)
 {
 	struct zmq_input *self = arg;
 	self->encoder_arg = encoder_arg;
@@ -98,6 +98,7 @@ static int set_callbacks(void *arg, const struct encoder_code *encoder, void *en
 		ZMQCHECK(zmq_connect(self->z_txbuf_w, pair_name));
 
 		self->encoder_running = 1;
+
 		pthread_create(&self->encoder_thread, NULL, zmq_encoder_main, self);
 	}
 	return 0;
@@ -106,43 +107,136 @@ fail:
 }
 
 
+
+
+/* Send a frame to ZMQ socket */
+int zmq_send_frame(void* sock, struct frame *frame) {
+	assert(sock != NULL && frame != NULL);
+	int ret;
+
+	ret = zmq_send(sock, &frame->hdr, sizeof(struct frame_header), ZMQ_SNDMORE | ZMQ_DONTWAIT);
+	if(ret < 0) {
+		print_fail_zmq("zmq_send_frame:hdr", ret);
+		goto fail;
+	}
+
+	ret = zmq_send(sock, frame->metadata, metadata_count(frame) * sizeof(struct metadata), ZMQ_SNDMORE | ZMQ_DONTWAIT);
+	if(ret < 0) {
+		print_fail_zmq("zmq_send_frame:meta", ret);
+		goto fail;
+	}
+
+	ret = zmq_send(sock, frame->data, frame->data_alloc_len, ZMQ_DONTWAIT);
+	if(ret < 0) {
+		print_fail_zmq("zmq_send_frame:data", ret);
+		goto fail;
+	}
+
+	frame->data_len = ret;
+	return 0;
+fail:
+	return -1;
+}
+
+
+/* Receive a frame from ZMQ socket */
+int zmq_recv_frame(void* sock, struct frame *frame) {
+	assert(sock != NULL);
+	int ret;
+
+	int64_t more;
+	size_t more_size = sizeof(more);
+
+	printf("receing...\n");
+
+	/* Read the first part */
+	ret = zmq_recv(sock, &frame->hdr, sizeof(struct frame_header), 0); // ZMQ_DONTWAIT);
+	printf("%d... %d\n", ret, sizeof(struct frame_header));
+	if (ret < 0) {
+		fprintf(stderr, "zmq_recv_frame: %d %s\n", ret, zmq_strerror(ret));
+		return ret;
+	}
+
+	if (ret == 0)
+		return 0; /* No frame in queue */
+
+	if (ret != sizeof(struct frame_header))
+		return -100;
+
+	if (zmq_getsockopt(sock, ZMQ_RCVMORE, &more, &more_size) < 0 || more != 1)
+		return -101;
+	printf("More %d...\n", more);
+
+	/* Allocate metadata and */
+	frame->metadata = malloc(MAX_METADATA * sizeof(struct metadata));
+	frame->data = malloc(frame->data_len);
+
+	/* Read metadata */
+	ret = zmq_recv(sock, frame->metadata, MAX_METADATA * sizeof(struct metadata), ZMQ_DONTWAIT);
+	if (ret < 0)
+		return ret;
+	if (ret % sizeof(struct metadata) != 0)
+		return -102;
+	if (zmq_getsockopt(sock, ZMQ_RCVMORE, &more, &more_size) < 0 || more != 1)
+		return -103;
+
+	printf("More %d...\n", more);
+
+	/* Read data */
+	ret = zmq_recv(sock, frame->data, frame->data_alloc_len, ZMQ_DONTWAIT);
+	if (ret < 0)
+		return ret;
+	frame->data_len = ret;
+	printf("DATA LEN %d...\n", ret);
+
+	if (zmq_getsockopt(sock, ZMQ_RCVMORE, &more, &more_size) < 0 || more != 0)
+		return -105;
+
+	printf("More %d...\n", more);
+
+	return 1;
+}
+
+
 static void *zmq_encoder_main(void *arg)
 {
 	struct zmq_input *self = arg;
+	assert(self->encoder && self->encoder_arg && "No encoder");
+	int ret;
 
-	char encoded_buf[sizeof(struct frame) + ENCODED_MAXLEN];
-	struct frame *encoded = (struct frame *)encoded_buf;
+	struct frame *uncoded = suo_frame_new(ENCODED_MAXLEN);
+	struct frame *encoded = suo_frame_new(ENCODED_MAXLEN);
 
 	/* Read frames from the SUB socket, encode them and put them
 	 * in the transmit buffer queue. */
 	while (self->encoder_running) {
-		int nread, nbits;
-		zmq_msg_t input_msg;
-		zmq_msg_init(&input_msg);
-		nread = zmq_msg_recv(&input_msg, self->z_tx_sub, 0);
-		if(nread >= 0) {
-			nbits = self->encoder->encode(self->encoder_arg,
-				zmq_msg_data(&input_msg), encoded, ENCODED_MAXLEN);
-			assert(nbits <= ENCODED_MAXLEN);
 
-			if(nbits >= 0) {
-				ZMQCHECK(zmq_send(self->z_txbuf_w, encoded, sizeof(struct frame) + nbits, 0));
-			} else {
-				/* Encode failed, should not happen */
-			}
-		} else {
-			print_fail_zmq("zmq_recv", nread);
-			goto fail;
+		// Receive from interprocess PAIR
+		if ((ret = zmq_recv_frame(self->z_tx_sub, encoded)) < 0) {
+			fprintf(stderr, "zmq_recv_frame: %d\n", ret);
+			//break;
+			continue;
 		}
-		zmq_msg_close(&input_msg);
+
+		suo_frame_print(uncoded, SUO_PRINT_DATA | SUO_PRINT_METADATA | SUO_PRINT_COLOR);
+
+		// Pass the bytes to encoder
+		if (self->encoder->encode(self->encoder_arg, uncoded, encoded, ENCODED_MAXLEN) < 0)
+			continue; // Encode failed, should not happen
+
+
+		//assert(nbits <= ENCODED_MAXLEN);
+		zmq_send_frame(self->z_txbuf_w, encoded);
+
 	}
 
-fail:
+	self->encoder_running = false;
 	return NULL;
 }
 
 
-static int get_frame(void *arg, struct frame *frame, size_t maxlen, timestamp_t timenow)
+
+static int zmq_input_get_frame(void* arg, struct frame *frame, size_t maxlen, timestamp_t timenow)
 {
 	int nread;
 	struct zmq_input *self = arg;
@@ -155,21 +249,12 @@ static int get_frame(void *arg, struct frame *frame, size_t maxlen, timestamp_t 
 	void *s = self->z_txbuf_r;
 	if (s == NULL)
 		s = self->z_tx_sub;
-	nread = zmq_recv(s, frame, sizeof(*frame) + maxlen, ZMQ_DONTWAIT);
-
-	if (nread <= 0) {
-		/* No frame in queue */
-		return -1;
-	} else if((size_t)nread == sizeof(*frame) + frame->len) {
-		return frame->len;
-	} else {
-		fprintf(stderr, "Warning: too long frame?\n");
-		return -1;
-	}
+	printf("receing...\n");
+	return zmq_recv_frame(s, frame);
 }
 
 
-static int destroy(void *arg)
+static int zmq_input_destroy(void *arg)
 {
 	struct zmq_input *self = arg;
 	if(self == NULL) return 0;
@@ -182,21 +267,25 @@ static int destroy(void *arg)
 }
 
 
-static int tick(void *arg, timestamp_t timenow)
+static int zmq_input_tick(void *arg, timestamp_t timenow)
 {
 	struct zmq_input *self = arg;
 	void *s = self->z_tick_pub;
 	if (s == NULL)
 		goto fail;
 	struct timing msg = {
-		.id = 3,
+		.id = SUO_ID_TIMING_MSG,
 		.flags = 0,
 		.time = timenow
 	};
 	ZMQCHECK(zmq_send(s, &msg, sizeof(msg), ZMQ_DONTWAIT));
 	return 0;
-fail:
+fail: /* For ZMQCHECK macro */
 	return -1;
+}
+
+static int set_frame_sink(void *arg, const struct encoder_code * sink, void *sink_arg) {
+	return 0;
 }
 
 
@@ -219,4 +308,15 @@ CONFIG_C(address_tick)
 CONFIG_I(flags)
 CONFIG_END()
 
-const struct tx_input_code zmq_tx_input_code = { "zmq_input", init, destroy, init_conf, set_conf, set_callbacks, get_frame, tick };
+
+const struct tx_input_code zmq_tx_input_code = {
+	.name = "zmq_input",
+	.init = zmq_input_init,
+	.destroy= zmq_input_destroy,
+	.init_conf = init_conf,
+	.set_conf = set_conf,
+	.set_frame_sink = set_frame_sink,
+	//.set_callbacks = zmq_input_set_callbacks,
+	.get_frame = zmq_input_get_frame,
+	.tick = zmq_input_tick
+};
