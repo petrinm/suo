@@ -18,6 +18,7 @@ include_directories(${LIQUIDDSP_INCLUDES})
 # Setup ZMQ
 find_package(ZeroMQ REQUIRED)
 
+add_compile_options(-g -Wall -Wextra)
 
 # Setup building of the library
 add_library(suo SHARED
@@ -45,7 +46,7 @@ add_library(suo SHARED
     signal-io/soapysdr_io.c
 )
 
-add_compile_options(-g -Wall -Wextra)
+
 target_include_directories(suo PUBLIC ${PROJECT_SOURCE_DIR})
 
 target_link_libraries(suo ${SoapySDR_LIBRARIES})
