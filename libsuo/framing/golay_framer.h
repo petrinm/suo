@@ -23,6 +23,9 @@ struct golay_framer_conf {
 	/* Use Reed Solomon error correction coding */
 	unsigned int use_rs;
 
+	/* Number of dummy bits generated to the tail */
+	unsigned int tail_length;
+
 };
 
 /* Module descriptor */

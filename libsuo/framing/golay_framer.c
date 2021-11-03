@@ -91,12 +91,15 @@ static void* golay_framer_init(const void* conf_v) {
 }
 
 
-static int golay_framer_destroy(void *arg)  {
+static int golay_framer_destroy(void *arg) {
 	struct golay_framer *self = (struct golay_framer*)arg;
 	free(self->data_buffer);
-	free(self->viterbi_buffer);
-	fec_destroy(self->l_rs);
-	fec_destroy(self->l_viterbi);
+	if (self->viterbi_buffer)
+		free(self->viterbi_buffer);
+	if (self->l_rs)
+		fec_destroy(self->l_rs);
+	if (self->l_viterbi)
+		fec_destroy(self->l_viterbi);
 	free(self);
 	return 0;
 }
@@ -105,15 +108,15 @@ static int golay_framer_destroy(void *arg)  {
 static int golay_framer_execute(void *arg, const struct frame *frame, bit_t* out, size_t max_len) {
 	struct golay_framer *self = (struct golay_framer*)arg;
 
-	unsigned int payload_len = frame->len;
+	unsigned int payload_len = frame->data_len;
 	if (self->c.use_rs)
 	 	payload_len += RS_LEN;
 
-	assert(frame->len < MAX_FRAME_LENGTH);
+	assert(payload_len < MAX_FRAME_LENGTH);
 
 	/* Generate preamble sequence */
 	bit_t *bit_ptr = out;
-	for (size_t i = 0; i < self->c.preamble_len; i++)
+	for (unsigned int i = 0; i < self->c.preamble_len; i++)
 		*bit_ptr++ = i & 1;
 
 	/* Append syncword */
@@ -154,6 +157,10 @@ static int golay_framer_execute(void *arg, const struct frame *frame, bit_t* out
 		bit_ptr += bytes_to_bits(bit_ptr, 8 * payload_len, self->data_buffer, 1);
 	}
 
+	/* Tail bits */
+	for (unsigned int i = 0; i < self->c.tail_length; i++)
+		*(bit_ptr++) = (rand() & 1);
+
 	size_t total_bits = (size_t)(bit_ptr - out);
 	assert(total_bits <= max_len);
 	return total_bits;
@@ -167,6 +174,7 @@ const struct golay_framer_conf golay_framer_defaults = {
 	.use_viterbi = 0,
 	.use_randomizer = 1,
 	.use_rs = 1,
+	.tail_length = 0,
 };
 
 
@@ -177,6 +185,7 @@ CONFIG_I(preamble_len)
 CONFIG_I(use_viterbi)
 CONFIG_I(use_randomizer)
 CONFIG_I(use_rs)
+CONFIG_I(tail_length)
 CONFIG_END()
 
 
