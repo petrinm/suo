@@ -3,8 +3,9 @@
 #include "framing/utils.h"
 
 
-size_t bytes_to_bits(bit_t *bits, size_t nbits, const uint8_t *bytes, bool lsb_first)
+size_t bytes_to_bits(bit_t *bits, const uint8_t *bytes, size_t nbytes, bool lsb_first)
 {
+#if 0
 	size_t i;
 	for (i = 0; i < nbits; i++) {
 		const size_t bytenum = i >> 3, bitnum = i & 7;
@@ -14,6 +15,18 @@ size_t bytes_to_bits(bit_t *bits, size_t nbits, const uint8_t *bytes, bool lsb_f
 			bits[i] = (bytes[bytenum] & (0x80 >> bitnum)) ? 1 : 0;
 	}
 	return nbits;
+#endif
+
+	if (lsb_first == 1) {
+		for (size_t i = 0; i < nbytes; i++)
+			bits += word_to_lsb_bits(bits, 8, *(bytes++));
+	}
+	else {
+		for (size_t i = 0; i < nbytes; i++)
+			bits += word_to_msb_bits(bits, 8, *(bytes++));
+	}
+
+	return 8 * nbytes;
 }
 
 
