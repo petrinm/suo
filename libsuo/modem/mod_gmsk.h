@@ -15,11 +15,14 @@ struct mod_gmsk_conf {
 	/* Symbol rate as symbols per second */
 	float symbolrate;
 
-	/* Center frequency */
+	/* Center frequency (Hz) */
 	float centerfreq;
 
 	/* Gaussian filter bandwidth-symbol time product */
 	float bt;
+
+	/* Length of the start/stop ramp in samples */
+	unsigned int ramp;
 };
 
 /* Modulator descriptor */
