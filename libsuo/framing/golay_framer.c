@@ -1,3 +1,6 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "framing/golay_framer.h"
 #include "framing/golay24.h"
@@ -5,25 +8,28 @@
 
 #include "suo_macros.h"
 
-#include <assert.h>
-#include <stdio.h>
-#include <string.h>
-
 #include <liquid/liquid.h>
 
 struct golay_framer {
 	/* Configuration */
 	struct golay_framer_conf c;
 
+	/* State */
 	int state;
 	int bit_idx;
 
+	/* Buffers */
 	byte_t* data_buffer;
 	byte_t* viterbi_buffer;
 	bit_t* bit_buffer;
+	struct frame *frame;
 
+	/* Liquid-DSP FECs */
 	fec l_rs;
 	fec l_viterbi;
+
+	/* Callbacks */
+	CALLBACK(frame_callback_t, frame_source);
 };
 
 
@@ -70,21 +76,23 @@ const uint8_t ccsds_randomizer[RANDOMIZER_LEN] = {
 #define MAX_FRAME_LENGTH  255
 #define RS_LEN      32
 
-static void* golay_framer_init(const void* conf_v) {
 
+static void* golay_framer_init(const void* conf_v) {
 	/* Initialize state and copy configuration */
-	struct golay_framer *self = malloc(sizeof(struct golay_framer));
+	struct golay_framer *self = (struct golay_framer *)malloc(sizeof(struct golay_framer));
 	memset(self, 0, sizeof(struct golay_framer));
 	self->c = *(const struct golay_framer_conf *)conf_v;
 
-	self->data_buffer = malloc(MAX_FRAME_LENGTH);
+	self->frame = suo_frame_new(256);
+
+	self->data_buffer = (uint8_t*)malloc(MAX_FRAME_LENGTH);
 
 	if (self->c.use_rs)
 		self->l_rs = fec_create(LIQUID_FEC_RS_M8, NULL);
 
 	if (self->c.use_viterbi) {
 		self->l_viterbi = fec_create(LIQUID_FEC_CONV_V27, NULL);
-		self->viterbi_buffer = malloc(2 * MAX_FRAME_LENGTH);
+		self->viterbi_buffer = (uint8_t*)malloc(2 * MAX_FRAME_LENGTH);
 	}
 
 	return self;
@@ -105,25 +113,53 @@ static int golay_framer_destroy(void *arg) {
 }
 
 
-static int golay_framer_execute(void *arg, const struct frame *frame, bit_t* out, size_t max_len) {
-	struct golay_framer *self = (struct golay_framer*)arg;
 
+static int golay_framer_set_frame_source(void *arg, frame_callback_t* callback, void *callback_arg) {
+	struct golay_framer *self = (struct golay_framer*)arg;
+	self->frame_source = callback;
+	self->frame_source_arg = callback_arg;
+	return SUO_OK;
+}
+
+
+static int golay_framer_get_symbols(void *arg, symbol_t* symbols, size_t max_symbols, timestamp_t t) {
+	struct golay_framer *self = (struct golay_framer*)arg;
+	if (self->frame_source == NULL || self->frame_source_arg == NULL)
+		return suo_error(SUO_ERROR, "No frame source defined!");
+
+	// Get a frame
+	int ret = self->frame_source(self->frame_source_arg, self->frame, 0);
+	if (ret <= 0)
+		return ret;
+
+	struct frame *frame = self->frame;
+
+	/* Start processing a frame */
 	unsigned int payload_len = frame->data_len;
 	if (self->c.use_rs)
 	 	payload_len += RS_LEN;
 
-	assert(payload_len < MAX_FRAME_LENGTH);
+	if (payload_len >= MAX_FRAME_LENGTH)
+		return suo_error(-9999, "Buffer overrun!");
 
 	/* Generate preamble sequence */
-	bit_t *bit_ptr = out;
+	bit_t *bit_ptr = symbols;
 	for (unsigned int i = 0; i < self->c.preamble_len; i++)
 		*bit_ptr++ = i & 1;
+
 
 	/* Append syncword */
 	bit_ptr += word_to_lsb_bits(bit_ptr, self->c.sync_len, self->c.sync_word);
 
 	/* Append Golay coded length (+coding flags) */
 	uint32_t coded_len = payload_len;
+#if 0
+	uint32_t meta_coded;
+	if(suo_get_metadata(frame, SUO_META_CODED, &meta_coded))
+		coded_len |= meta_coded;
+#else
+	coded_len |= 0x600;
+#endif
 	if (self->c.use_rs)
 		coded_len |= 0x200;
 	if (self->c.use_randomizer)
@@ -151,18 +187,20 @@ static int golay_framer_execute(void *arg, const struct frame *frame, bit_t* out
 	/* Viterbi decode all bits */
 	if (self->c.use_viterbi) {
 		fec_encode(self->l_viterbi, frame->data_len, self->data_buffer, self->viterbi_buffer);
-		bit_ptr += bytes_to_bits(bit_ptr, 2 * 8 * payload_len, self->viterbi_buffer, 1);
+		bit_ptr += bytes_to_bits(bit_ptr, self->viterbi_buffer, 2 * payload_len, 1);
 	}
 	else {
-		bit_ptr += bytes_to_bits(bit_ptr, 8 * payload_len, self->data_buffer, 1);
+		bit_ptr += bytes_to_bits(bit_ptr, self->data_buffer, payload_len, 1);
 	}
 
 	/* Tail bits */
 	for (unsigned int i = 0; i < self->c.tail_length; i++)
 		*(bit_ptr++) = (rand() & 1);
 
-	size_t total_bits = (size_t)(bit_ptr - out);
-	assert(total_bits <= max_len);
+	size_t total_bits = (size_t)(bit_ptr - symbols);
+	if (total_bits >= max_symbols)
+		return suo_error(-9999, "Buffer overrun!");
+
 	return total_bits;
 }
 
@@ -195,5 +233,6 @@ extern const struct encoder_code golay_framer_code = {
 	.destroy = golay_framer_destroy,
 	.init_conf = init_conf, // Constructed by CONFIG-macro
 	.set_conf = set_conf, // Constructed by CONFIG-macro
-	.encode = golay_framer_execute,
+	.set_frame_source = golay_framer_set_frame_source,
+	.get_symbols = golay_framer_get_symbols,
 };

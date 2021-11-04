@@ -14,7 +14,7 @@ struct golay_deframer {
 	struct golay_deframer_conf c;
 	uint64_t sync_mask;
 
-	struct frame frame;
+	struct frame* frame;
 	byte_t* data_buffer;
 	unsigned int frame_pos;
 	unsigned int frame_len;
@@ -25,8 +25,10 @@ struct golay_deframer {
 
 	unsigned int coded_len;
 
-	//CALLBACK(frame_output)
-	void* output;
+	SUO_CALLBACK(bit_sink);
+	SUO_CALLBACK(frame_source);
+
+	CALLBACK(frame_callback_t, frame_sink);
 
 	fec l_rs;
 	fec l_viterbi;
@@ -44,12 +46,13 @@ extern const uint8_t ccsds_randomizer[RANDOMIZER_LEN];
 static void* golay_deframer_init(const void* conf_v) {
 
 	/* Initialize state and copy configuration */
-	struct golay_deframer *self = malloc(sizeof(struct golay_deframer));
-	memset(self, 0, sizeof(struct golay_deframer));
+	struct golay_deframer *self = (struct golay_deframer*)calloc(1, sizeof(struct golay_deframer));
 	self->c = *(const struct golay_deframer_conf *)conf_v;
 
 	self->sync_mask = (1ULL << self->c.sync_len) - 1;
 	self->data_buffer = malloc(2 * MAX_FRAME_LENGTH);
+
+	self->frame = suo_frame_new(1024);
 
 	if (self->c.skip_rs == 0)
 		self->l_rs = fec_create(LIQUID_FEC_RS_M8, NULL);
@@ -67,15 +70,21 @@ static int golay_deframer_destroy(void *arg)  {
 	struct golay_deframer *self = (struct golay_deframer*)arg;
 	free(self->data_buffer);
 	//free(self->viterbi_buffer);
-	fec_destroy(self->l_rs);
-	fec_destroy(self->l_viterbi);
+	if (self->l_rs)
+		fec_destroy(self->l_rs);
+	if (self->l_viterbi)
+		fec_destroy(self->l_viterbi);
 	free(self);
 	return 0;
 }
 
+static int golay_deframer_reset(void *arg)  {
+	struct golay_deframer *self = (struct golay_deframer*)arg;
+	self->state = 0;
+	self->latest_bits = 0;
+}
 
-
-static int golay_deframer_execute(void *arg, unsigned bit, timestamp_t time)
+static int golay_deframer_execute(void *arg, symbol_t bit, timestamp_t time)
 {
 	struct golay_deframer *self = (struct golay_deframer *)arg;
 
@@ -85,18 +94,19 @@ static int golay_deframer_execute(void *arg, unsigned bit, timestamp_t time)
 		 */
 
 		self->latest_bits = (self->latest_bits << 1) | bit;
+
 		unsigned int sync_errors = __builtin_popcountll((self->latest_bits & self->sync_mask) ^ self->c.sync_word);
 
 		if (sync_errors <= self->c.sync_threshold) {
-			printf("SYNC FOUND!\n");
+			printf("SYNC FOUND! %d\n", sync_errors);
 
 			/* Syncword found, start saving bits when next bit arrives */
 			self->bit_idx = 0;
 			self->latest_bits = 0;
 
 			//
-			self->frame.hdr.timestamp = time;
-			SET_METADATA_I(&self->frame, METADATA_SYNC_ERRORS, sync_errors);
+			self->frame->hdr.timestamp = time;
+			SET_METADATA_UI(self->frame, METADATA_SYNC_ERRORS, sync_errors);
 
 			self->state = 1;
 			return 1;
@@ -118,7 +128,7 @@ static int golay_deframer_execute(void *arg, unsigned bit, timestamp_t time)
 			self->coded_len = self->latest_bits;
 			int golay_errors = decode_golay24(&self->coded_len);
 			if (golay_errors < 0) {
-				printf("GOLAY failed\n");
+				// TODO: Increase some counter
 				self->state = 0;
 				return 0;
 			}
@@ -132,16 +142,14 @@ static int golay_deframer_execute(void *arg, unsigned bit, timestamp_t time)
 				return 0;
 			}
 
-			SET_METADATA_I(&self->frame, METADATA_GOLAY_CODED, self->coded_len);
-			SET_METADATA_I(&self->frame, METADATA_GOLAY_ERRORS, golay_errors);
+			SET_METADATA_UI(self->frame, METADATA_GOLAY_CODED, self->coded_len);
+			SET_METADATA_UI(self->frame, METADATA_GOLAY_ERRORS, golay_errors);
 
 			// Receive double number of bits if viterbi is used
 			if ((self->coded_len & 0x800) != 0)
 				self->frame_len *= 2;
 
-
-			printf("Frame length: %d\n", self->frame_len);
-
+			// Clear for next state
 			self->frame_pos = 0;
 			self->latest_bits = 0;
 			self->bit_idx = 0;
@@ -158,30 +166,36 @@ static int golay_deframer_execute(void *arg, unsigned bit, timestamp_t time)
  		self->latest_bits = (self->latest_bits << 1) | bit;
  		self->bit_idx++;
 
-		if (self->bit_idx == 8) {
+		if (self->bit_idx >= 8) {
+			printf("%02x  ", self->latest_bits);
 
-			self->frame.data[self->frame_pos] = self->latest_bits;
+			self->frame->data[self->frame_pos] = self->latest_bits;
 			self->latest_bits = 0;
-			self->frame_pos += 1;
+			self->frame_pos++;
 			self->bit_idx = 0;
 
+
 			if (self->frame_pos >= self->frame_len) {
-				self->frame.data_len = self->frame_len;
+				self->frame->data_len = self->frame_len;
+				self->state = 0;
 
 				if (self->c.skip_viterbi == 0 && (self->coded_len & 0x800) != 0) {
 					/* Decode viterbi */
+					return suo_error(SUO_ERR_NOT_IMPLEMENTED, "Viterbi not implemented");
 					// TODO
 					// fec_decode(self->l_viterbi, ndec, self->buf, out->data);
+					// self->frame_len /= 2;
 				}
 
 				if (self->c.skip_randomizer == 0 && (self->coded_len & 0x400) != 0) {
 					/* Scrambler the bytes */
-					for (size_t i = 0; i < self->frame.data_len; i++)
-						self->data_buffer[i] ^= ccsds_randomizer[i];
+					for (size_t i = 0; i < self->frame->data_len; i++)
+						self->frame->data[i] ^= ccsds_randomizer[i];
 				}
 
 				if (self->c.skip_rs == 0 && (self->coded_len & 0x200) != 0) {
 					/* Decode Reed-Solomon */
+					return suo_error(SUO_ERR_NOT_IMPLEMENTED, "Reed-Solomon not implemented");
 #if 0
 					/* Hmm, liquid-dsp doesn't return whether decode succeeded or not :(  */
 					fec_decode(self->l_rs, ndec, self->buf, out->data);
@@ -205,10 +219,9 @@ static int golay_deframer_execute(void *arg, unsigned bit, timestamp_t time)
 #endif
 				}
 
-				self->latest_bits = 0;
-				self->state = 0;
 
-				//self->output.frame(self->output_arg, &self->frame);
+				int ret = self->frame_sink(self->frame_sink_arg, self->frame, time);
+				if (ret < 0) return ret;
 
 				return 0;
 			}
@@ -221,6 +234,14 @@ static int golay_deframer_execute(void *arg, unsigned bit, timestamp_t time)
 	return 0;
 }
 
+
+static int golay_deframer_set_frame_sink(void *arg, frame_callback_t callback, void *callback_arg) {
+	struct golay_deframer *self = (struct golay_deframer *)arg;
+
+	self->frame_sink = callback;
+	self->frame_sink_arg = callback_arg;
+	return 0;
+}
 
 
 const struct golay_deframer_conf golay_deframer_defaults = {
@@ -249,5 +270,6 @@ extern const struct decoder_code golay_deframer_code = {
 	.destroy = golay_deframer_destroy,
 	.init_conf = init_conf, // Constructed by CONFIG-macro
 	.set_conf = set_conf, // Constructed by CONFIG-macro
-	.decode = golay_deframer_execute,
+	.set_frame_sink = golay_deframer_set_frame_sink,
+	.execute = golay_deframer_execute,
 };
