@@ -47,7 +47,7 @@ static void *zmq_encoder_main(void*);
 static void *zmq_input_init(const void *confv)
 {
 	const struct zmq_tx_input_conf *conf = confv;
-	struct zmq_input *self = calloc(1, sizeof(*self));
+	struct zmq_input *self = (struct zmq_input *)calloc(1, sizeof(*self));
 	if(self == NULL) return NULL;
 	self->flags = conf->flags;
 	self->z_txbuf_r = NULL;
@@ -58,18 +58,28 @@ static void *zmq_input_init(const void *confv)
 	if(zmq == NULL)
 		zmq = zmq_ctx_new();
 
+	// Connect the frame socket
 	self->z_tx_sub = zmq_socket(zmq, ZMQ_SUB);
-	if (self->flags & ZMQIO_BIND)
+	if (self->flags & ZMQIO_BIND) {
+		printf("Input binded: %s\n", conf->address);
 		ZMQCHECK(zmq_bind(self->z_tx_sub, conf->address));
-	else
+	}
+	else {
+		printf("Input connected: %s\n", conf->address);
 		ZMQCHECK(zmq_connect(self->z_tx_sub, conf->address));
+	}
 	ZMQCHECK(zmq_setsockopt(self->z_tx_sub, ZMQ_SUBSCRIBE, "", 0));
 
+	// Connect the tick socket
 	self->z_tick_pub = zmq_socket(zmq, ZMQ_PUB);
-	if (self->flags & ZMQIO_BIND_TICK)
+	if (self->flags & ZMQIO_BIND_TICK) {
+		printf("Input ticks binded to: %s\n", conf->address_tick);
 		ZMQCHECK(zmq_bind(self->z_tick_pub, conf->address_tick));
-	else
+	}
+	else {
+		printf("Input ticks binded to: %s\n", conf->address_tick);
 		ZMQCHECK(zmq_connect(self->z_tick_pub, conf->address_tick));
+	}
 
 	return self;
 fail:
@@ -80,7 +90,7 @@ fail:
 
 static int zmq_input_set_callbacks(void *arg, const struct encoder_code *encoder, void *encoder_arg)
 {
-	struct zmq_input *self = arg;
+	struct zmq_input *self = (struct zmq_input *)arg;
 	self->encoder_arg = encoder_arg;
 	self->encoder = encoder;
 
@@ -110,29 +120,31 @@ fail:
 
 
 /* Send a frame to ZMQ socket */
-int zmq_send_frame(void* sock, struct frame *frame) {
+int zmq_send_frame(void* sock, const struct frame *frame) {
 	assert(sock != NULL && frame != NULL);
 	int ret;
 
+	/* Send frame header field */
 	ret = zmq_send(sock, &frame->hdr, sizeof(struct frame_header), ZMQ_SNDMORE | ZMQ_DONTWAIT);
 	if(ret < 0) {
 		print_fail_zmq("zmq_send_frame:hdr", ret);
 		goto fail;
 	}
 
-	ret = zmq_send(sock, frame->metadata, metadata_count(frame) * sizeof(struct metadata), ZMQ_SNDMORE | ZMQ_DONTWAIT);
+	/* Send frame metadata */
+	ret = zmq_send(sock, frame->metadata, suo_metadata_count(frame) * sizeof(struct metadata), ZMQ_SNDMORE | ZMQ_DONTWAIT);
 	if(ret < 0) {
 		print_fail_zmq("zmq_send_frame:meta", ret);
 		goto fail;
 	}
 
-	ret = zmq_send(sock, frame->data, frame->data_alloc_len, ZMQ_DONTWAIT);
+	/* Send frame data */
+	ret = zmq_send(sock, frame->data, frame->data_len, ZMQ_DONTWAIT);
 	if(ret < 0) {
 		print_fail_zmq("zmq_send_frame:data", ret);
 		goto fail;
 	}
 
-	frame->data_len = ret;
 	return 0;
 fail:
 	return -1;
@@ -147,52 +159,59 @@ int zmq_recv_frame(void* sock, struct frame *frame) {
 	int64_t more;
 	size_t more_size = sizeof(more);
 
-	printf("receing...\n");
 
 	/* Read the first part */
-	ret = zmq_recv(sock, &frame->hdr, sizeof(struct frame_header), 0); // ZMQ_DONTWAIT);
-	printf("%d... %d\n", ret, sizeof(struct frame_header));
+	ret = zmq_recv(sock, &frame->hdr, sizeof(struct frame_header), ZMQ_DONTWAIT);
+	if (ret == 0 || (ret == -1 && errno == EAGAIN))
+		return 0;  /* No frame in queue */
+
 	if (ret < 0) {
-		fprintf(stderr, "zmq_recv_frame: %d %s\n", ret, zmq_strerror(ret));
+		fprintf(stderr, "zmq_recv_frame: Failed to read socket %d %s\n", ret, zmq_strerror(errno));
 		return ret;
 	}
 
-	if (ret == 0)
-		return 0; /* No frame in queue */
-
-	if (ret != sizeof(struct frame_header))
+	if (ret != sizeof(struct frame_header)) {
+		fprintf(stderr, "zmq_recv_frame: Header field size missmatch %d\n", ret);
 		return -100;
+	}
 
-	if (zmq_getsockopt(sock, ZMQ_RCVMORE, &more, &more_size) < 0 || more != 1)
+	if (zmq_getsockopt(sock, ZMQ_RCVMORE, &more, &more_size) < 0 || more != 1) {
+		fprintf(stderr, "zmq_recv_frame: Confustion with more: %d\n", more);
 		return -101;
-	printf("More %d...\n", more);
+	}
 
-	/* Allocate metadata and */
-	frame->metadata = malloc(MAX_METADATA * sizeof(struct metadata));
-	frame->data = malloc(frame->data_len);
 
 	/* Read metadata */
 	ret = zmq_recv(sock, frame->metadata, MAX_METADATA * sizeof(struct metadata), ZMQ_DONTWAIT);
-	if (ret < 0)
+	if (ret < 0) {
+		fprintf(stderr, "zmq_recv_frame: Failed to read metadata %d %s\n", ret, zmq_strerror(errno));
 		return ret;
-	if (ret % sizeof(struct metadata) != 0)
+	}
+	if (ret % sizeof(struct metadata) != 0) {
+		fprintf(stderr, "zmq_recv_frame: Amount off metadata is strange %d\n", ret);
 		return -102;
-	if (zmq_getsockopt(sock, ZMQ_RCVMORE, &more, &more_size) < 0 || more != 1)
-		return -103;
+	}
 
-	printf("More %d...\n", more);
+	if (zmq_getsockopt(sock, ZMQ_RCVMORE, &more, &more_size) < 0 || more != 1) {
+		fprintf(stderr, "zmq_recv_frame: Confustion with more: %d\n", more);
+		return -103;
+	}
+
+
 
 	/* Read data */
 	ret = zmq_recv(sock, frame->data, frame->data_alloc_len, ZMQ_DONTWAIT);
-	if (ret < 0)
+	if (ret < 0) {
+		fprintf(stderr, "zmq_recv_frame: failed to read data %d %s\n", ret, zmq_strerror(errno));
 		return ret;
+	}
+
 	frame->data_len = ret;
-	printf("DATA LEN %d...\n", ret);
 
-	if (zmq_getsockopt(sock, ZMQ_RCVMORE, &more, &more_size) < 0 || more != 0)
+	if (zmq_getsockopt(sock, ZMQ_RCVMORE, &more, &more_size) < 0 || more != 0) {
+		fprintf(stderr, "zmq_recv_frame: Confustion with more: %d\n", more);
 		return -105;
-
-	printf("More %d...\n", more);
+	}
 
 	return 1;
 }
@@ -200,7 +219,7 @@ int zmq_recv_frame(void* sock, struct frame *frame) {
 
 static void *zmq_encoder_main(void *arg)
 {
-	struct zmq_input *self = arg;
+	struct zmq_input *self = (struct zmq_input *)arg;
 	assert(self->encoder && self->encoder_arg && "No encoder");
 	int ret;
 
@@ -236,11 +255,9 @@ static void *zmq_encoder_main(void *arg)
 
 
 
-static int zmq_input_get_frame(void* arg, struct frame *frame, size_t maxlen, timestamp_t timenow)
+static int zmq_input_source_frame(void* arg, struct frame *frame, timestamp_t timenow)
 {
-	int nread;
-	struct zmq_input *self = arg;
-
+	struct zmq_input *self = (struct zmq_input *)arg;
 	(void)timenow; // Not used since protocol stack doesn't run here
 
 	/* If encoder is not set, the encoder thread is not created
@@ -249,14 +266,14 @@ static int zmq_input_get_frame(void* arg, struct frame *frame, size_t maxlen, ti
 	void *s = self->z_txbuf_r;
 	if (s == NULL)
 		s = self->z_tx_sub;
-	printf("receing...\n");
+
 	return zmq_recv_frame(s, frame);
 }
 
 
 static int zmq_input_destroy(void *arg)
 {
-	struct zmq_input *self = arg;
+	struct zmq_input *self = (struct zmq_input *)arg;
 	if(self == NULL) return 0;
 	if(self->encoder_running) {
 		self->encoder_running = 0;
@@ -269,7 +286,7 @@ static int zmq_input_destroy(void *arg)
 
 static int zmq_input_tick(void *arg, timestamp_t timenow)
 {
-	struct zmq_input *self = arg;
+	struct zmq_input *self = (struct zmq_input *)arg;
 	void *s = self->z_tick_pub;
 	if (s == NULL)
 		goto fail;
@@ -317,6 +334,6 @@ const struct tx_input_code zmq_tx_input_code = {
 	.set_conf = set_conf,
 	.set_frame_sink = set_frame_sink,
 	//.set_callbacks = zmq_input_set_callbacks,
-	.get_frame = zmq_input_get_frame,
+	.source_frame = zmq_input_source_frame,
 	.tick = zmq_input_tick
 };

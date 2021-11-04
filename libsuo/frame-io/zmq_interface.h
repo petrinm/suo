@@ -25,7 +25,7 @@ struct zmq_tx_input_conf {
 };
 
 
-int zmq_send_frame(void* sock, struct frame *frame);
+int zmq_send_frame(void* sock, const struct frame *frame);
 int zmq_recv_frame(void* sock, struct frame *frame);
 
 extern const struct zmq_rx_output_conf zmq_rx_output_defaults;

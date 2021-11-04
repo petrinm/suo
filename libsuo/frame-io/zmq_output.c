@@ -46,25 +46,35 @@ static void *zmq_decoder_main(void*);
 
 static void *zmq_output_init(const void *confv)
 {
-	const struct zmq_rx_output_conf *conf = confv;
-	struct zmq_output *self = calloc(1, sizeof(*self));
+	const struct zmq_rx_output_conf *conf = (const struct zmq_rx_output_conf *)confv;
+	struct zmq_output *self = (struct zmq_output*)calloc(1, sizeof(*self));
 	if(self == NULL) return NULL;
 	self->flags = conf->flags;
 
 	if(zmq == NULL)
 		zmq = zmq_ctx_new();
 
+	// Connect the frame socket
 	self->z_rx_pub = zmq_socket(zmq, ZMQ_PUB);
-	if (self->flags & ZMQIO_BIND)
+	if (self->flags & ZMQIO_BIND) {
+		printf("Output binded to: %s\n", conf->address);
 		ZMQCHECK(zmq_bind(self->z_rx_pub, conf->address));
-	else
+	}
+	else {
+		printf("Output connected to: %s\n", conf->address);
 		ZMQCHECK(zmq_connect(self->z_rx_pub, conf->address));
+	}
 
+	// Connect the tick socket
 	self->z_tick_pub = zmq_socket(zmq, ZMQ_PUB);
-	if (self->flags & ZMQIO_BIND_TICK)
+	if (self->flags & ZMQIO_BIND_TICK) {
+		printf("Output ticks binded to: %s\n", conf->address_tick);
 		ZMQCHECK(zmq_bind(self->z_tick_pub, conf->address_tick));
-	else
+	}
+	else {
+		printf("Output ticks connected to: %s\n", conf->address_tick);
 		ZMQCHECK(zmq_connect(self->z_tick_pub, conf->address_tick));
+	}
 
 	return self;
 
@@ -76,7 +86,7 @@ fail: // TODO cleanup
 
 static int zmq_output_set_callbacks(void *arg, const struct decoder_code *decoder, void *decoder_arg)
 {
-	struct zmq_output *self = arg;
+	struct zmq_output *self = (struct zmq_output*)arg;
 	self->decoder = decoder;
 	self->decoder_arg = decoder_arg;
 
@@ -108,7 +118,7 @@ fail:
 
 static int zmq_output_destroy(void *arg)
 {
-	struct zmq_output *self = arg;
+	struct zmq_output *self = (struct zmq_output*)arg;
 	if(self == NULL) return 0;
 	if(self->decoder_running) {
 		self->decoder_running = 0;
@@ -121,7 +131,7 @@ static int zmq_output_destroy(void *arg)
 
 static void *zmq_decoder_main(void *arg)
 {
-	struct zmq_output *self = arg;
+	struct zmq_output *self = (struct zmq_output*)arg;
 
 	struct frame *coded = suo_frame_new(DECODED_MAXLEN);
 	struct frame *decoded = suo_frame_new(DECODED_MAXLEN);
@@ -160,7 +170,7 @@ fail:
 
 static int zmq_output_frame(void *arg, const struct frame *frame)
 {
-	struct zmq_output *self = arg;
+	struct zmq_output *self = (struct zmq_output*)arg;
 
 	/* Read straight from the subscriber socket
 	 * if decoder thread and its socket is not created */
@@ -168,7 +178,6 @@ static int zmq_output_frame(void *arg, const struct frame *frame)
 	if (s == NULL)
 		s = self->z_rx_pub; // return -1;
 
-	printf("dsasdsadsadsa\n");
 	return zmq_send_frame(s, frame);
 }
 
@@ -176,7 +185,7 @@ static int zmq_output_frame(void *arg, const struct frame *frame)
 /* Send a timing */
 static int zmq_output_tick(void *arg, timestamp_t timenow)
 {
-	struct zmq_output *self = arg;
+	struct zmq_output *self = (struct zmq_output*)arg;
 	void *s = self->z_tick_pub;
 	if (s == NULL)
 		return -1;
