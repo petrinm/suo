@@ -7,23 +7,63 @@
 
 #define SUO_COLORS
 
+
+int suo_error(int err_code, const char* err_msg) {
+	fprintf(stderr, "suo_error %s\n", err_msg);
+	return err_code;
+}
+
+
 struct frame* suo_frame_new(unsigned int data_len) {
-	struct frame* frame = calloc(1, sizeof(struct frame));
-	frame->metadata = calloc(MAX_METADATA, sizeof(struct metadata));
-	frame->data = calloc(1, data_len);
+	struct frame* frame = (struct frame* )calloc(1, sizeof(struct frame));
+	frame->metadata = (struct metadata*)calloc(MAX_METADATA, sizeof(struct metadata));
+	frame->metadata_len = MAX_METADATA;
+	frame->data = (uint8_t*)calloc(1, data_len);
 	frame->data_len = 0;
-	//frame->data_alloc_len = data_len;
+	frame->data_alloc_len = data_len;
 	return frame;
 }
 
 void suo_frame_clear(struct frame* frame) {
-	assert(frame != NULL);
+	if (frame == NULL)
+		return;
+
 	memset(&frame->hdr, 0, sizeof(struct frame_header));
 	memset(frame->metadata, 0, MAX_METADATA * sizeof(struct metadata));
 	frame->data_len = 0;
 }
 
+
+void suo_frame_copy(struct frame* dst, const struct frame* src) {
+
+	if (dst == NULL || src == NULL)
+		return;
+
+	/* Copy header */
+	memcpy(&dst->hdr, &src->hdr, sizeof(struct frame_header));
+
+	/* Copy data */
+	if (dst->data == NULL || dst->data_alloc_len < src->data_len) {
+		dst->data = realloc(dst->data, src->data_len);
+		dst->data_alloc_len = src->data_len;
+	}
+	memcpy(dst->data, src->data, src->data_len);
+	dst->data_len = src->data_len;
+
+	/* Copy metadata */
+	if (dst->metadata == NULL /* || dst->metadata_len < src->metadata_len*/) {
+		dst->metadata = realloc(dst->metadata, MAX_METADATA * sizeof(struct metadata));
+		//dst->metadata_alloc_len = src->metadata_len;
+	}
+	memcpy(dst->metadata, src->metadata, sizeof(struct metadata) * MAX_METADATA); // src->metadata_len);
+
+
+}
+
 void suo_frame_destroy(struct frame* frame) {
+	if (frame == NULL)
+		return;
+
 	if (frame->metadata != NULL) {
 		free(frame->metadata);
 		frame->metadata = NULL;
@@ -60,8 +100,11 @@ void suo_frame_print(struct frame* frame, unsigned int flags) {
 		frame->hdr.id, frame->data_len, frame->hdr.timestamp);
 
 	if (flags & SUO_PRINT_METADATA) {
-		printf("Metadata:\n  ");
-		metadata_print(frame);
+		printf("Metadata:\n    ");
+		if (frame->metadata[0].ident != 0)
+			suo_metadata_print(frame);
+		else
+			printf("(none)");
 		printf("\n");
 	}
 

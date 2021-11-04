@@ -14,6 +14,8 @@
 // Data type to represent I/Q samples in most calculations
 typedef float complex sample_t;
 
+typedef uint8_t symbol_t;
+
 // Fixed-point I/Q samples
 typedef uint8_t cu8_t[2];
 typedef int16_t cs16_t[2];
@@ -56,6 +58,10 @@ struct any_code {
 };
 
 
+#define SUO_OK        0
+#define SUO_ERROR      -1
+#define SUO_ERR_NOT_IMPLEMENTED  -3
+
 /* Flag to prevent transmission of a frame if it's too late,
  * i.e. if the timestamp is already in the past */
 #define SUO_FLAGS_NO_LATE 0x40000
@@ -82,6 +88,13 @@ struct frame {
 
 #define SUO_CALLBACK(x)
 
+typedef int(*tick_callback_t)(void*, timestamp_t timestamp);
+typedef int(*frame_callback_t)(void*, struct frame *frame, timestamp_t timestamp);
+typedef int(*symbol_callback_t)(void*, symbol_t *symbols, size_t max_symbols, timestamp_t timestamp);
+typedef int(*sample_callback_t)(void*, sample_t *samples, size_t max_samples, timestamp_t timestamp);
+
+
+
 /* -----------------------------------------
  * Receive related interfaces and data types
  * ----------------------------------------- */
@@ -105,8 +118,8 @@ struct decoder_code {
 	 * Return negative value if decoding failed. */
 	//int   (*decode)  (void *, const struct frame *in, struct frame *out);
 
-	int   (*execute)  (void *, const struct frame *in, bit_t bit, timestamp_t now);
-	int(*execute_soft)(void *, const struct frame *in, bit_t bit, timestamp_t now);
+	int   (*execute)  (void *, bit_t bit, timestamp_t now);
+	int(*execute_soft)(void *, bit_t bit, timestamp_t now);
 };
 
 
@@ -151,11 +164,16 @@ struct receiver_code {
 };
 
 
+#define DEFINE_CALLBACK(TYPE) \
+	s
+
+
 /* ------------------------------------------
  * Transmit related interfaces and data types
  * ------------------------------------------ */
 
 struct tx_input_code;
+
 /* Interface to a frame encoder module */
 struct encoder_code {
 	const char *name;
@@ -164,16 +182,20 @@ struct encoder_code {
 	void *(*init_conf) (void);
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
+	int   (*tick)      (void *, timestamp_t timenow);
+
 
 	//int   (*set_symbol_sink) (void *, const struct decoder_code *, void *rx_output_arg);
 	int   (*set_frame_source) (void *, const struct tx_input_code * source, void *arg);
 
-	/* Encode a frame.
-	 * Input is an array of data bytes,
-	 * output is an array of encoded symbols.
-	 * Return the number of symbols in the encoded frame. */
+	int (*get_symbols)(void*, symbol_t* symbols, unsigned int max_symbols, timestamp_t t);
+
 	int   (*encode)  (void *, const struct frame *in, struct frame *out, size_t maxlen);
+
+	//RET_CALLBACK(sample)  (*get_sample_source)(void *, unsigned int ident);
+
 };
+
 
 
 /* Interface to a transmitter input module.
@@ -194,7 +216,7 @@ struct tx_input_code {
 	 * before time_dl, it should be returned in this call, since in the
 	 * next call it may be too late. Returning a frame to transmit after
 	 * time_dl is also accepted though. */
-	int   (*get_frame) (void *, struct frame *frame, size_t maxlen, timestamp_t time_dl);
+	int   (*source_frame) (void *, struct frame *frame, timestamp_t t);
 
 	// Called regularly with the time where transmit signal generation is going
 	int   (*tick)      (void *, timestamp_t timenow);
@@ -218,6 +240,8 @@ typedef struct {
 	int end;
 } tx_return_t;
 
+
+
 /* Interface to a transmitter module.
  * These perform modulation of a signal. */
 struct transmitter_code {
@@ -227,14 +251,17 @@ struct transmitter_code {
 	void *(*init_conf) (void);
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
-	// Set callback to a tx_input module which provides frames to be transmitted
-	int   (*set_callbacks) (void *, const struct tx_input_code *, void *tx_input_arg);
-	int   (*set_symbol_sink) (void *, const struct tx_input_code *, void *tx_input_arg);
-
+	int   (*set_tick) (void *, tick_callback_t* callback, void *callback_arg);
+	int   (*set_frame_source) (void *, frame_callback_t* callback, void *callback_arg);
+	int   (*set_symbol_source) (void *, symbol_callback_t* callback, void *callback_arg);
+	int   (*set_sample_source) (void *, sample_callback_t* callback, void *callback_arg);
 
 	/* Generate a buffer of signal to be transmitted.
 	 * Timestamp points to the first sample in the buffer. */
 	tx_return_t (*execute) (void *, sample_t *samples, size_t nsamples, timestamp_t timestamp);
+
+	int (*source_samples) (void *, sample_t *samples, size_t nsamples, timestamp_t timestamp);
+
 };
 
 
@@ -248,6 +275,7 @@ struct transmitter_code {
  * Signal to be transmitted is asked from a given transmitter.
  */
 struct signal_io_code {
+
 	const char *name;
 	void *(*init)      (const void *conf);
 	int   (*destroy)   (void *);
@@ -255,13 +283,15 @@ struct signal_io_code {
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
 	// Set callbacks to a receiver and a transmitter
-	//int   (*set_callbacks)(void *, const struct receiver_code *, void *receiver_arg, const struct transmitter_code *, void *transmitter_arg);
+	//void get_callback();
 	int   (*set_sample_sink)(void *, const struct receiver_code *, void *receiver_arg);
 	int   (*set_sample_source)(void *, const struct transmitter_code *, void *transmitter_arg);
+
 
 	// The I/O "main loop"
 	int   (*execute)    (void *);
 };
+
 
 
 
@@ -285,9 +315,14 @@ struct frame* suo_frame_new(unsigned int data_len);
 
 void suo_frame_clear(struct frame* frame);
 
+/**/
+void suo_frame_copy(struct frame* dst, const struct frame* src);
+
 /* Destroy */
 void suo_frame_destroy(struct frame* frame);
 
+/**/
+int suo_error(int err_code, const char* err_msg);
 
 #define SUO_PRINT_DATA      1
 #define SUO_PRINT_METADATA  2

@@ -8,7 +8,7 @@
 #define SUO_COLORS
 
 
-struct metadata* set_metadata(struct frame* frame, unsigned ident, unsigned type) {
+struct metadata* suo_metadata_set(struct frame* frame, unsigned ident, unsigned type) {
 	struct metadata* m = frame->metadata;
 	if (m == NULL)
 		m = frame->metadata = calloc(1, MAX_METADATA * sizeof(struct metadata));
@@ -26,19 +26,20 @@ struct metadata* set_metadata(struct frame* frame, unsigned ident, unsigned type
 }
 
 
-unsigned int metadata_count(struct frame* frame) {
+unsigned int suo_metadata_count(struct frame* frame) {
 	struct metadata* m = frame->metadata;
 	if (m == NULL)
 		return 0;
 	unsigned int mi = 0;
 	for (; mi < MAX_METADATA; mi++) {
-		if (m->type != 0)
+		if (m->type == 0)
 			return mi;
+		m++;
 	}
 	return mi;
 }
 
-void metadata_name(struct metadata* m, char* name) {
+void suo_metadata_name(struct metadata* m, char* name) {
 	switch (m->ident) {
 	case METADATA_ID: strcpy(name, "id"); break;
 	case METADATA_MODE: strcpy(name, "mode"); break;
@@ -46,7 +47,7 @@ void metadata_name(struct metadata* m, char* name) {
 	case METADATA_RSSI: strcpy(name, "rssi"); break;
 	case METADATA_CFO: strcpy(name, "cfo"); break;
 	case METADATA_SYNC_ERRORS: strcpy(name, "sync_errors"); break;
-	case METADATA_GOLAY_CODED: strcpy(name, "golary_coded"); break;
+	case METADATA_GOLAY_CODED: strcpy(name, "golay_coded"); break;
 	case METADATA_GOLAY_ERRORS: strcpy(name, "golay_errors"); break;
 	case METADATA_RS_BIT_ERRORS: strcpy(name, "rs_bit_error"); break;
 	case METADATA_RS_OCTET_ERRORS: strcpy(name, "rs_octet_error"); break;
@@ -56,7 +57,7 @@ void metadata_name(struct metadata* m, char* name) {
 
 
 
-void metadata_print(struct frame* frame /*, unsigned int flags*/ ) {
+void suo_metadata_print(struct frame* frame /*, unsigned int flags*/ ) {
 	assert(frame != NULL);
 
 	char name[32];
@@ -71,13 +72,13 @@ void metadata_print(struct frame* frame /*, unsigned int flags*/ ) {
 		if (m != frame->metadata) // Not the first item?
 			printf(", ");
 
-		metadata_name(m, name);
+		suo_metadata_name(m, name);
 
 		switch (m->type) {
-	 	case METATYPE_FLOAT:  printf("   %s = %f", name, m->fl); break;
-	 	case METATYPE_DOUBLE: printf("   %s = %lf", name, m->dl); break;
-	 	case METATYPE_INT:    printf("   %s = %d", name, m->i); break;
-	 	case METATYPE_UINT:   printf("   %s = %d", name, m->ui); break;
+	 	case METATYPE_FLOAT:  printf("%s = %f", name, m->fl); break;
+	 	case METATYPE_DOUBLE: printf("%s = %lf", name, m->dl); break;
+	 	case METATYPE_INT:    printf("%s = %d", name, m->i); break;
+	 	case METATYPE_UINT:   printf("%s = %d", name, m->ui); break;
 		}
 
 		m++;
