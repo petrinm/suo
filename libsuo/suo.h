@@ -15,6 +15,7 @@
 typedef float complex sample_t;
 
 typedef uint8_t symbol_t;
+typedef float soft_symbol_t;
 
 // Fixed-point I/Q samples
 typedef uint8_t cu8_t[2];
@@ -86,13 +87,25 @@ struct frame {
 	unsigned int data_alloc_len;
 };
 
-#define SUO_CALLBACK(x)
 
-typedef int(*tick_callback_t)(void*, timestamp_t timestamp);
-typedef int(*frame_callback_t)(void*, struct frame *frame, timestamp_t timestamp);
-typedef int(*symbol_callback_t)(void*, symbol_t *symbols, size_t max_symbols, timestamp_t timestamp);
-typedef int(*sample_callback_t)(void*, sample_t *samples, size_t max_samples, timestamp_t timestamp);
+typedef int(*tick_source_t)(void*, timestamp_t timestamp);
+typedef int(*tick_sink_t)(void*, timestamp_t timestamp);
 
+typedef int(*frame_source_t)(void*, struct frame *frame, timestamp_t timestamp);
+typedef int(*frame_sink_t)(void*, const struct frame *frame, timestamp_t timestamp);
+
+
+typedef int(*symbol_source_t)(void*, symbol_t *symbols, size_t max_symbols, timestamp_t timestamp);
+//typedef int(*symbol_sink_t)(void*, symbol_t *symbols, size_t max_symbols, timestamp_t timestamp);
+typedef int(*symbol_sink_t)(void*, symbol_t symbols, timestamp_t timestamp);
+
+
+typedef int(*soft_symbol_source_t)(void*, soft_symbol_t *symbols, size_t max_symbols, timestamp_t timestamp);
+//typedef int(*soft_symbol_sink_t)(void*, soft_symbol_t *symbols, size_t max_symbols, timestamp_t timestamp);
+typedef int(*soft_symbol_sink_t)(void*, soft_symbol_t symbol, timestamp_t timestamp);
+
+typedef int(*sample_source_t)(void*, sample_t *samples, size_t max_samples, timestamp_t timestamp);
+typedef int(*sample_sink_t)(void*, const sample_t *samples, size_t num_samples, timestamp_t timestamp);
 
 
 /* -----------------------------------------
@@ -109,7 +122,7 @@ struct decoder_code {
 	void *(*init_conf) (void);
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
-	int   (*set_frame_sink) (void *, const struct rx_output_code * sink, void *sink_arg);
+	int   (*set_frame_sink) (void *, frame_sink_t callback, void *arg);
 	//int   (*set_frame_source) (void *, const struct rx_output_code *source, void *source_arg);
 
 	/* Decode a frame.
@@ -118,8 +131,11 @@ struct decoder_code {
 	 * Return negative value if decoding failed. */
 	//int   (*decode)  (void *, const struct frame *in, struct frame *out);
 
-	int   (*execute)  (void *, bit_t bit, timestamp_t now);
-	int(*execute_soft)(void *, bit_t bit, timestamp_t now);
+	symbol_sink_t sink_symbol;
+	symbol_sink_t sink_soft_symbol;
+
+	//int   (*execute)  (void *, bit_t bit, timestamp_t now);
+	//int(*execute_soft)(void *, bit_t bit, timestamp_t now);
 };
 
 
@@ -133,13 +149,13 @@ struct rx_output_code {
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
 	// Set callback to a decoder which is used to decode a frame
-	int   (*set_frame_source) (void *, const struct decoder_code *, void *decoder_arg);
+	int   (*set_frame_source) (void *, frame_source_t callback, void *arg);
 
 	// Called by a receiver when a frame has been received
-	int   (*frame) (void *, const struct frame *frame);
+	frame_sink_t sink_frame;
 
 	// Called regularly with the time where reception is going
-	int   (*tick)      (void *, timestamp_t timenow);
+	tick_sink_t sink_tick;
 };
 
 
@@ -155,12 +171,14 @@ struct receiver_code {
 	int   (*set_conf)      (void *conf, const char *parameter, const char *value);
 
 	// Set callback to an rx_output module which is called when a frame has been received
-	int   (*set_symbol_sink) (void *, const struct decoder_code *, void *rx_output_arg);
+	int   (*set_symbol_sink) (void *, symbol_sink_t callback, void* arg);
 	//int   (*set_soft_symbol_sink) (void *, const struct decoder_code *, void *rx_output_arg);
 	//int   (*set_sample_source)(void*);
 
 	// Execute the receiver for a buffer of input signal
-	int   (*execute)       (void *, const sample_t *samp, size_t nsamp, timestamp_t timestamp);
+	//int   (*execute)       (void *, const sample_t *samp, size_t nsamp, timestamp_t timestamp);
+
+	sample_sink_t sink_samples;
 };
 
 
@@ -186,9 +204,9 @@ struct encoder_code {
 
 
 	//int   (*set_symbol_sink) (void *, const struct decoder_code *, void *rx_output_arg);
-	int   (*set_frame_source) (void *, const struct tx_input_code * source, void *arg);
+	int   (*set_frame_source) (void *, frame_source_t callback, void *arg);
 
-	int (*get_symbols)(void*, symbol_t* symbols, unsigned int max_symbols, timestamp_t t);
+	symbol_source_t source_symbols;
 
 	int   (*encode)  (void *, const struct frame *in, struct frame *out, size_t maxlen);
 
@@ -251,16 +269,14 @@ struct transmitter_code {
 	void *(*init_conf) (void);
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
-	int   (*set_tick) (void *, tick_callback_t* callback, void *callback_arg);
-	int   (*set_frame_source) (void *, frame_callback_t* callback, void *callback_arg);
-	int   (*set_symbol_source) (void *, symbol_callback_t* callback, void *callback_arg);
-	int   (*set_sample_source) (void *, sample_callback_t* callback, void *callback_arg);
+	int   (*set_tick) (void *, tick_source_t callback, void *arg);
+	int   (*set_frame_source) (void *, frame_source_t callback, void *arg);
+	int   (*set_symbol_source) (void *, symbol_source_t callback, void *arg);
+	int   (*set_sample_source) (void *, sample_source_t callback, void *arg);
 
 	/* Generate a buffer of signal to be transmitted.
 	 * Timestamp points to the first sample in the buffer. */
-	tx_return_t (*execute) (void *, sample_t *samples, size_t nsamples, timestamp_t timestamp);
-
-	int (*source_samples) (void *, sample_t *samples, size_t nsamples, timestamp_t timestamp);
+	sample_source_t source_samples;
 
 };
 
@@ -283,10 +299,8 @@ struct signal_io_code {
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
 	// Set callbacks to a receiver and a transmitter
-	//void get_callback();
-	int   (*set_sample_sink)(void *, const struct receiver_code *, void *receiver_arg);
-	int   (*set_sample_source)(void *, const struct transmitter_code *, void *transmitter_arg);
-
+	int   (*set_sample_sink)(void *, sample_sink_t callback, void *arg);
+	int   (*set_sample_source)(void *, sample_source_t callback, void *arg);
 
 	// The I/O "main loop"
 	int   (*execute)    (void *);
@@ -334,6 +348,6 @@ int suo_error(int err_code, const char* err_msg);
  * such as constellations in end applications as well,
  * so some more general way would be nice. */
 void print_samples(unsigned stream, sample_t *samples, size_t len);
-void suo_frame_print(struct frame* frame, unsigned int flags);
+void suo_frame_print(const struct frame* frame, unsigned int flags);
 
 #endif

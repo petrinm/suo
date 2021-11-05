@@ -78,7 +78,7 @@ void suo_frame_destroy(struct frame* frame) {
 }
 
 
-void suo_frame_print(struct frame* frame, unsigned int flags) {
+void suo_frame_print(const struct frame* frame, unsigned int flags) {
 	if (frame == NULL)
 		return;
 

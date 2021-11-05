@@ -69,8 +69,8 @@ void test_zmq_simple(void) {
 	/*
 	 * Send the frame twice
 	 */
-	CU_ASSERT_FATAL(out_code->frame(out_inst, out_frame) == 0);
-	CU_ASSERT_FATAL(out_code->frame(out_inst, out_frame) == 0);
+	CU_ASSERT_FATAL(out_code->sink_frame(out_inst, out_frame, time) == 0);
+	CU_ASSERT_FATAL(out_code->sink_frame(out_inst, out_frame, time) == 0);
 
 	SLEEP(200);
 

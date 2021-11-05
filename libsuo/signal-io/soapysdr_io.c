@@ -20,11 +20,9 @@
 #endif
 
 struct soapysdr_io {
-	const struct receiver_code *receiver;
-	void *receiver_arg;
-	const struct transmitter_code *transmitter;
-	void *transmitter_arg;
 	struct soapysdr_io_conf conf;
+	CALLBACK(sample_sink_t, sample_sink);
+	CALLBACK(sample_source_t, sample_source);
 };
 
 
@@ -59,11 +57,13 @@ static void sighandler(int sig)
 #endif
 
 
-static int execute(void *arg)
+static int soapysdr_io_execute(void *arg)
 {
 	struct soapysdr_io *self = arg;
 	SoapySDRDevice *sdr = NULL;
 	SoapySDRStream *rxstream = NULL, *txstream = NULL;
+	assert(self->sample_sink && self->sample_sink_arg);
+	assert(self->sample_source && self->sample_source_arg);
 
 	const struct soapysdr_io_conf *const conf = &self->conf;
 
@@ -76,6 +76,14 @@ static int execute(void *arg)
 	const long timeout_us = sample_ns * 0.001 * 10.0 * rx_buflen;
 	// Used for lost sample detection
 	const long long timediff_max = sample_ns * 0.5;
+
+	if (conf->rx_on && (self->sample_sink == NULL || self->sample_sink_arg == NULL))
+		return suo_error(-999, "RX is enabled but no sample sink provided");
+	if (conf->tx_on && (self->sample_source == NULL || self->sample_source_arg == NULL))
+		return suo_error(-999, "TX is enabled but no sample source provided");
+
+	if (conf->rx_on == 0 && conf->tx_on == 0)
+		return suo_error(-999, "Neither RX or TX enabled");
 
 	/*--------------------------------
 	 ---- Hardware initialization ----
@@ -178,11 +186,9 @@ static int execute(void *arg)
 
 	fprintf(stderr, "Starting streams\n");
 	if (conf->rx_on)
-		SOAPYCHECK(SoapySDRDevice_activateStream, sdr,
-			rxstream, 0, 0, 0);
+		SOAPYCHECK(SoapySDRDevice_activateStream, sdr, rxstream, 0, 0, 0);
 	if (conf->tx_on)
-		SOAPYCHECK(SoapySDRDevice_activateStream, sdr,
-			txstream, 0, 0, 0);
+		SOAPYCHECK(SoapySDRDevice_activateStream, sdr, txstream, 0, 0, 0);
 
 
 	/*----------------------------
@@ -192,8 +198,10 @@ static int execute(void *arg)
 	bool tx_burst_going = 0;
 
 	long long current_time = 0;
+	SoapySDRDevice_setHardwareTime(sdr, 0, "");
 	if (conf->use_time)
 		current_time = SoapySDRDevice_getHardwareTime(sdr, "");
+
 	/* tx_last_end_time is when the previous produced TX buffer
 	 * ended, i.e. where the next buffer should begin */
 	long long tx_last_end_time = current_time + tx_latency_time;
@@ -229,7 +237,10 @@ static int execute(void *arg)
 					rx_timestamp = current_time; // from previous iteration
 					current_time += sample_ns * ret + 0.5;
 				}
-				self->receiver->execute(self->receiver_arg, rxbuf, ret, rx_timestamp);
+
+				// TODO: For each sample sink
+				self->sample_sink(self->sample_sink_arg, rxbuf, ret, rx_timestamp);
+
 			} else if(ret <= 0) {
 				soapy_fail("SoapySDRDevice_readStream", ret);
 			}
@@ -249,10 +260,11 @@ static int execute(void *arg)
 			}
 		}
 
+#if 0
 		if (conf->tx_on) {
 			sample_t txbuf[tx_buflen];
 			int flags = 0, ret;
-			tx_return_t ntx = { 0, 0, 0 };
+
 			timestamp_t tx_from_time, tx_until_time;
 			tx_from_time = tx_last_end_time;
 			tx_until_time = current_time + tx_latency_time;
@@ -262,14 +274,15 @@ static int execute(void *arg)
 			if (nsamp > 0) {
 				if ((unsigned)nsamp > tx_buflen)
 					nsamp = tx_buflen;
-				ntx = self->transmitter->execute(self->transmitter_arg, txbuf, nsamp, tx_from_time);
-				assert(ntx.len >= 0 && ntx.len <= nsamp);
-				assert(ntx.end >= 0 && ntx.end <= /*ntx.len*/nsamp);
-				assert(ntx.begin >= 0 && ntx.begin <= /*ntx.len*/nsamp);
+				int ret = self->sample_source(self->sample_source_arg, txbuf, nsamp, tx_from_time);
+				//assert(ntx.len >= 0 && ntx.len <= nsamp);
+				//assert(ntx.end >= 0 && ntx.end <= /*ntx.len*/nsamp);
+				//assert(ntx.begin >= 0 && ntx.begin <= /*ntx.len*/nsamp);
+
 				if (conf->tx_cont) {
 					// Disregard begin and end in case continuous transmit stream is configured
-					ntx.begin = 0;
-					ntx.end = ntx.len;
+					//ntx.begin = 0;
+					//ntx.end = ntx.len;
 				}
 				tx_last_end_time = tx_from_time + (timestamp_t)(sample_ns * ntx.len);
 			}
@@ -314,6 +327,66 @@ static int execute(void *arg)
 				tx_burst_going = 0;
 			}
 		}
+#else
+		if (conf->tx_on) {
+			sample_t txbuf[tx_buflen];
+			int flags = 0, ret;
+
+			timestamp_t tx_from_time, tx_until_time;
+			tx_from_time = tx_last_end_time;
+			tx_until_time = current_time + tx_latency_time;
+			int nsamp = round((double)(tx_until_time - tx_from_time) / sample_ns);
+			//fprintf(stderr, "TX nsamp: %d\n", nsamp);
+			int tx_len = 0;
+
+			if (nsamp > 0) {
+				if ((unsigned)nsamp > tx_buflen)
+					nsamp = tx_buflen;
+				tx_len = self->sample_source(self->sample_source_arg, txbuf, nsamp, tx_from_time);
+				tx_last_end_time = tx_from_time + (timestamp_t)(sample_ns * tx_len);
+			}
+
+			if (conf->use_time)
+				flags = SOAPY_SDR_HAS_TIME;
+
+			if (0 /*tx_burst_going && ntx.begin > 0*/) {
+				/* If end of burst flag wasn't sent in last round,
+				 * send it now together with one dummy sample.
+				 * One sample is sent because trying to send
+				 * zero samples gave a timeout error. */
+				txbuf[0] = 0;
+				const void *txbuffs[] = { txbuf };
+				flags |= SOAPY_SDR_END_BURST;
+				ret = SoapySDRDevice_writeStream(sdr, txstream,
+					txbuffs, 1, &flags,
+					tx_from_time, timeout_us);
+				if(ret <= 0)
+					soapy_fail("SoapySDRDevice_writeStream (end of burst)", ret);
+				tx_burst_going = 0;
+			}
+
+			if (tx_len > 0) {
+				fprintf(stderr, "TX nsamp: %d\n", tx_len);
+				// If ntx.end does not point to end of the buffer, a burst has ended
+				if ( 1 /* ntx.end < ntx.len */) {
+					flags |= SOAPY_SDR_END_BURST;
+					tx_burst_going = 0;
+				} else {
+					tx_burst_going = 1;
+				}
+
+				const void *txbuffs[] = { txbuf };
+				ret = SoapySDRDevice_writeStream(sdr, txstream,
+					txbuffs, tx_len, &flags,
+					tx_from_time + (timestamp_t)(sample_ns * 0),
+					timeout_us);
+				if(ret <= 0)
+					soapy_fail("SoapySDRDevice_writeStream", ret);
+			} else {
+				tx_burst_going = 0;
+			}
+		}
+#endif
 	}
 
 	fprintf(stderr, "Stopped receiving\n");
@@ -336,12 +409,10 @@ exit_soapy:
 }
 
 
-static void *init(const void *conf)
+static void *soapysdr_io_init(const void *conf)
 {
-	struct soapysdr_io *self;
-	self = calloc(1, sizeof(*self));
-	if (self == NULL)
-		return self;
+	struct soapysdr_io *self = calloc(1, sizeof(struct soapysdr_io));
+	if (self == NULL) return NULL;
 	self->conf = *(struct soapysdr_io_conf*)conf;
 	if (strcmp(SoapySDR_getABIVersion(), SOAPY_SDR_ABI_VERSION) != 0)
 		fprintf(stderr, "Warning: Wrong SoapySDR ABI version\n");
@@ -349,23 +420,39 @@ static void *init(const void *conf)
 }
 
 
-static int destroy(void *arg)
-{
-	// TODO
-	(void)arg;
-	return 0;
-}
-
-
-static int set_callbacks(void *arg, const struct receiver_code *receiver, void *receiver_arg, const struct transmitter_code *transmitter, void *transmitter_arg)
+static int soapysdr_io_destroy(void *arg)
 {
 	struct soapysdr_io *self = arg;
-	self->receiver = receiver;
-	self->receiver_arg = receiver_arg;
-	self->transmitter = transmitter;
-	self->transmitter_arg = transmitter_arg;
+	self->sample_sink = NULL;
+	self->sample_sink_arg = NULL;
+	self->sample_source = NULL;
+	self->sample_source_arg = NULL;
+	free(self);
 	return 0;
 }
+
+
+static int soapysdr_io_set_sample_sink(void *arg, sample_sink_t callback, void *callback_arg)
+{
+	struct soapysdr_io *self = arg;
+	if (callback == NULL || callback_arg == NULL)
+		return suo_error(-3, "NULL");
+	self->sample_sink = callback;
+	self->sample_sink_arg = callback_arg;
+	return 0;
+}
+
+
+static int soapysdr_io_set_sample_source(void *arg, sample_source_t callback, void *callback_arg)
+{
+	struct soapysdr_io *self = arg;
+	if (callback == NULL || callback_arg == NULL)
+		return suo_error(-3, "NULL");
+	self->sample_source = callback;
+	self->sample_source_arg = callback_arg;
+	return 0;
+}
+
 
 
 const struct soapysdr_io_conf soapysdr_io_defaults = {
@@ -421,4 +508,13 @@ CONFIG_C(tx_antenna)
 CONFIG_END()
 
 
-const struct signal_io_code soapysdr_io_code = { "soapysdr_io", init, destroy, init_conf, set_conf, set_callbacks, execute };
+const struct signal_io_code soapysdr_io_code = {
+	.name="soapysdr_io",
+	.init=soapysdr_io_init,
+	.destroy=soapysdr_io_destroy,
+	.init_conf=init_conf,
+	.set_conf=set_conf,
+	.set_sample_sink=soapysdr_io_set_sample_sink,
+	.set_sample_source=soapysdr_io_set_sample_source,
+	.execute=soapysdr_io_execute
+};

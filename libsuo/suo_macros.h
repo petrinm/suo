@@ -48,7 +48,6 @@ static int set_conf(void *conf, const char *parameter, const char *value) \
 	return -1; /* No configuration parameters */ \
 }
 
-#define CALLBACK
-
+#define CALLBACK(TYPE, NAME)  TYPE NAME; void * NAME ## _arg;
 
 #endif

@@ -1,4 +1,5 @@
-/* ALSA I/O
+/*
+ * ALSA I/O
  *
  * This is slightly redundant since SoapySDR also has an audio module,
  * but directly using the ALSA API lets us use snd_pcm_link to
@@ -7,7 +8,8 @@
  * restarting both streams to re-establish synchronization.
  */
 
-#if ENABLE_ALSA
+#ifdef ENABLE_ALSA
+
 #include "alsa_io.h"
 #include "suo_macros.h"
 #include "conversion.h"
@@ -16,18 +18,20 @@
 #include <assert.h>
 #include <stdio.h>
 
+
 typedef int16_t cs16_t[2];
 
+
 struct alsa_io {
-	const struct receiver_code *receiver;
-	void *receiver_arg;
-	const struct transmitter_code *transmitter;
-	void *transmitter_arg;
+
+	struct alsa_io_conf conf;
 
 	snd_pcm_t *rx_pcm, *tx_pcm;
 
-	struct alsa_io_conf conf;
+	CALLBACK(sample_sink_t, sink_samples);
+	CALLBACK(sample_source_t, source_samples);
 };
+
 
 #define ALSACHECK(a) do {\
 	int retcheck = a; \
@@ -72,7 +76,7 @@ static timestamp_t samples_to_ns(uint64_t n, uint32_t fs) {
 }
 
 
-static void *init(const void *confv)
+static void *alsa_io_init(const void *confv)
 {
 	struct alsa_io *self = calloc(1, sizeof(*self));
 	if (self == NULL)
@@ -102,7 +106,7 @@ err:
 }
 
 
-static int execute(void *arg)
+static int alsa_io_execute(void *arg)
 {
 	struct alsa_io *self = arg;
 	struct alsa_io_conf *conf = &self->conf;
@@ -154,7 +158,7 @@ static int execute(void *arg)
 			size_t n = ret;
 			assert(n <= buf_max);
 			cs16_to_cf(buf_int, buf_flt, n);
-			self->receiver->execute(self->receiver_arg,
+			self->sink_samples(self->sink_samples_arg,
 				buf_flt, n,
 				samples_to_ns(base_samps + rx_samps, conf->samplerate));
 			rx_samps += n;
@@ -172,14 +176,13 @@ static int execute(void *arg)
 			if (tx_n > buf_max)
 				tx_n = buf_max;
 
-			ntx = self->transmitter->execute(self->transmitter_arg,
+			int len = self->source_samples(self->source_samples_arg,
 				buf_flt, tx_n,
 				samples_to_ns(base_samps + tx_samps, conf->samplerate));
 
-			size_t n = ntx.len;
-			assert(n <= buf_max);
-			cf_to_cs16(buf_flt, buf_int, n);
-			ret = snd_pcm_writei(tx_pcm, buf_int, n);
+			assert(len <= buf_max);
+			cf_to_cs16(buf_flt, buf_int, len);
+			ret = snd_pcm_writei(tx_pcm, buf_int, len);
 			if (ret < 0) {
 				fprintf(stderr, "ALSA write: %s\n", snd_strerror(ret));
 				streaming = 0;
@@ -199,22 +202,28 @@ err:
 
 
 
-static int destroy(void *arg)
-{
-	// TODO
-	(void)arg;
+static int alsa_io_destroy(void *arg) {
+	struct alsa_io *self = arg;
+	// TODO:
 	return 0;
 }
 
-static int set_callbacks(void *arg, const struct receiver_code *receiver, void *receiver_arg, const struct transmitter_code *transmitter, void *transmitter_arg)
-{
+
+
+static int alsa_io_set_sample_sink(void *arg, sample_sink_t callback, void *callback_arg) {
 	struct alsa_io *self = arg;
-	self->receiver = receiver;
-	self->receiver_arg = receiver_arg;
-	self->transmitter = transmitter;
-	self->transmitter_arg = transmitter_arg;
-	return 0;
+	self->sink_samples = callback;
+	self->sink_samples_arg = callback_arg;
+	return SUO_OK;
 }
+
+static int alsa_io_set_sample_source(void *arg, sample_source_t callback, void *callback_arg) {
+	struct alsa_io *self = arg;
+	self->source_samples = callback;
+	self->source_samples_arg = callback_arg;
+	return SUO_OK;
+}
+
 
 const struct alsa_io_conf alsa_io_defaults = {
 	.rx_on = 1,
@@ -236,5 +245,15 @@ CONFIG_C(rx_name)
 CONFIG_C(tx_name)
 CONFIG_END()
 
-const struct signal_io_code alsa_io_code = { "alsa_io", init, destroy, init_conf, set_conf, set_callbacks, execute };
-#endif
+const struct signal_io_code alsa_io_code = {
+	.name = "alsa_io",
+	.init = alsa_io_init,
+	.destroy = alsa_io_destroy,
+	.init_conf = init_conf,
+	.set_conf = set_conf,
+	.set_sample_sink = alsa_io_set_sample_sink,
+	.set_sample_source = alsa_io_set_sample_source,
+	.execute = alsa_io_execute
+};
+
+#endif /* ENABLE_ALSA */

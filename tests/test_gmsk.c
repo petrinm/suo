@@ -101,6 +101,8 @@ static int source_dummy_frame(void * v, struct frame *frame, timestamp_t t) {
 	frame->data_len = 28;
 	for (unsigned i = 0; i < 28; i++)
 		frame->data[i] = i;
+
+	return SUO_OK;
 }
 
 

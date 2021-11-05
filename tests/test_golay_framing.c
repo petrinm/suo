@@ -10,16 +10,17 @@
 
 #include "assert_metadata.h"
 
-static const struct frame* received_frame = NULL;
+static struct frame* received_frame = NULL;
 
-static int dummy_frame_sink(void *arg, const struct frame *frame) {
-	(void)arg;
+static int dummy_frame_sink(void *arg, const struct frame *frame, timestamp_t t) {
+	(void)arg; (void)t;
 	received_frame = suo_frame_new(frame->data_len);
 	suo_frame_copy(received_frame, frame);
 	return SUO_OK;
 }
 
-static int dummy_frame_source(void *arg, struct frame *frame) {
+static int dummy_frame_source(void *arg, struct frame *frame, timestamp_t t) {
+	(void)t;
 	suo_frame_copy(frame, arg);
 	return 1;
 }
@@ -65,7 +66,7 @@ static void test_golay_simple(void)
 		suo_frame_print(transmit_frame, SUO_PRINT_DATA | SUO_PRINT_METADATA | SUO_PRINT_COLOR);
 
 		/* Encode frame to bits */
-		int ret = framer->get_symbols(inst, symbols, 1024, t);
+		int ret = framer->source_symbols(inst, symbols, 1024, t);
 		printf("Output symbols = %d\n", ret);
 		CU_ASSERT_FATAL(ret == 64 + 32 + 24 + 8 * 28);
 
@@ -121,17 +122,15 @@ static void test_golay_simple(void)
 
 		received_frame = NULL;
 
-		struct frame *frame = suo_frame_new(256);
-
 		/*
 		 * Feed some random symbols + bit from previous test
 		 */
 		for (int i = 0; i < 100; i++)
-			ret = deframer->execute(inst, RANDOM_BIT(), t++);
+			ret = deframer->sink_symbol(inst, RANDOM_BIT(), t++);
 		for (int i = 0; i < 344; i++)
-			ret = deframer->execute(inst, symbols[i], t++);
+			ret = deframer->sink_symbol(inst, symbols[i], t++);
 		for (int i = 0; i < 100; i++)
-			ret = deframer->execute(inst, RANDOM_BIT(), t++);
+			ret = deframer->sink_symbol(inst, RANDOM_BIT(), t++);
 
 		CU_ASSERT_FATAL(received_frame != NULL);
 		suo_frame_print(received_frame, SUO_PRINT_DATA | SUO_PRINT_METADATA);
