@@ -172,7 +172,7 @@ static int zmq_output_sink_frame(void *arg, const struct frame *frame, timestamp
 {
 	struct zmq_output *self = (struct zmq_output*)arg;
 
-	suo_frame_print(frame, SUO_PRINT_DATA | SUO_PRINT_COLOR);
+	suo_frame_print(frame, SUO_PRINT_DATA | SUO_PRINT_METADATA | SUO_PRINT_COLOR);
 
 	/* Read straight from the subscriber socket
 	 * if decoder thread and its socket is not created */

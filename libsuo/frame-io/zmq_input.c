@@ -237,7 +237,7 @@ static void *zmq_encoder_main(void *arg)
 			continue;
 		}
 
-		suo_frame_print(uncoded, SUO_PRINT_DATA | SUO_PRINT_METADATA);
+		//suo_frame_print(uncoded, SUO_PRINT_DATA | SUO_PRINT_METADATA);
 
 		// Pass the bytes to encoder
 		if (self->encoder->encode(self->encoder_arg, uncoded, encoded, ENCODED_MAXLEN) < 0)
@@ -269,7 +269,7 @@ static int zmq_input_source_frame(void* arg, struct frame *frame, timestamp_t ti
 
 	int ret = zmq_recv_frame(s, frame);
 	if (ret == 1)
-		suo_frame_print(frame, SUO_PRINT_DATA | SUO_PRINT_COLOR);
+		suo_frame_print(frame, SUO_PRINT_DATA);
 	return ret;
 }
 

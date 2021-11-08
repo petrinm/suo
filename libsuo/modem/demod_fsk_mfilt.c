@@ -234,23 +234,13 @@ static int demod_fsk_mfilt_sink_samples(void *arg, const sample_t *samples, size
 			}
 
 
-#ifdef DEBUG3
-			/* Debugging outputs */
-			int write(int, const void*, size_t);
-			write(3, &demod, sizeof(float));
-			float asdf = nco_crcf_get_frequency(self->l_nco);
-			write(3, &asdf, sizeof(float));
-			write(3, &comb, sizeof(float));
-			write(3, &synced_sample, sizeof(float));
-#endif
-
 			/* Decisions and deframing
 			 * ----------------------- */
 			if (synced == true) {
 
 				/* Process one output symbol from synchronizer */
 				bit_t decision = (synced_sample >= 0) ? 1 : 0;
-				printf("%d ", decision);
+				//printf("%d ", decision);
 				if (self->symbol_sink(self->symbol_sink_arg, decision, timestamp)) {
 
 					/* If this was the first sync, collect store some metadata. */
@@ -260,11 +250,9 @@ static int demod_fsk_mfilt_sink_samples(void *arg, const sample_t *samples, size
 						//SET_METADATA_F(self->frame, METADATA_POWER, cfo);
 						//SET_METADATA_F(self->frame, METADATA_RSSI, rssi);
 					}
-					printf("SYNC!\n");
 					self->receiver_lock = true;
 				}
 				else {
-					printf("SYNC LOST\n");
 					/* No sync, no lock */
 					self->receiver_lock = false;
 				}

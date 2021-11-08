@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include <time.h>
 
 #include <CUnit/CUnit.h>
 #include <CUnit/CUnitCI.h>
@@ -30,6 +31,7 @@ static int dummy_frame_source(void *arg, struct frame *frame, timestamp_t t) {
 
 static void test_golay_simple(void)
 {
+	srand(time(NULL));
 
 	struct frame *transmit_frame = NULL;
 	symbol_t* symbols = calloc(1, 1024);
@@ -114,7 +116,7 @@ static void test_golay_simple(void)
 		void* inst = deframer->init(conf);
 		CU_ASSERT(inst != NULL);
 
-		deframer->set_frame_sink(inst, dummy_frame_sink, 0xdeadbeef);
+		deframer->set_frame_sink(inst, dummy_frame_sink, (void*)0xdeadbeef);
 
 
 		timestamp_t t = 10000;
@@ -125,11 +127,12 @@ static void test_golay_simple(void)
 		/*
 		 * Feed some random symbols + bit from previous test
 		 */
-		for (int i = 0; i < 100; i++)
+		unsigned int i, l = 50 + rand() % 50;
+		for (i = 0; i < l; i++)
 			ret = deframer->sink_symbol(inst, RANDOM_BIT(), t++);
-		for (int i = 0; i < 344; i++)
+		for (i = 0; i < 344; i++)
 			ret = deframer->sink_symbol(inst, symbols[i], t++);
-		for (int i = 0; i < 100; i++)
+		for (i = 0; i < 100; i++)
 			ret = deframer->sink_symbol(inst, RANDOM_BIT(), t++);
 
 		CU_ASSERT_FATAL(received_frame != NULL);

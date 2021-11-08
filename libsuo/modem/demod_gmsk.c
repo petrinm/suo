@@ -59,8 +59,8 @@ struct demod_gmsk {
 	float complex x_prime;
 
 	// timing recovery objects, states
-	firpfb_rrrf l_mf;                 // matched filter decimator
-	firpfb_rrrf l_dmf;                // derivative matched filter decimator
+	firpfb_rrrf l_mf;               // matched filter decimator
+	firpfb_rrrf l_dmf;              // derivative matched filter decimator
 	unsigned int npfb;              // number of filters in symsync
 	float pfb_q;                    // filtered timing error
 	float pfb_soft;                 // soft filterbank index
@@ -92,7 +92,7 @@ struct demod_gmsk {
 
 };
 
-static void execute_sample(struct demod_gmsk *self, float complex _x);
+static int execute_sample(struct demod_gmsk *self, float complex _x);
 static int update_fi(struct demod_gmsk *self, float complex _x);
 
 
@@ -381,7 +381,7 @@ static int execute_rxpreamble(struct demod_gmsk *self, float complex _x)
 {
 	if (self->preamble_counter == self->preamble_len) {
 		demod_gmsk_reset(self);
-		return;
+		return suo_error(-999, "Preample fault");
 	}
 	// mix signal down
 	float complex y;
@@ -432,7 +432,7 @@ static int execute_rxpayload(struct demod_gmsk *self, float complex _x)
 		unsigned char s = mf_out > 0.0f ? 1 : 0;
 
 		//printf("%d ", s);
-		if (self->state = STATE_RXPREAMBLE) {
+		if (self->state == STATE_RXPREAMBLE) {
 			if (self->symbol_sink(self->symbol_sink_arg, s, 0) == 1) {
 				self->state = STATE_HELLO;
 			}
@@ -448,7 +448,7 @@ static int execute_rxpayload(struct demod_gmsk *self, float complex _x)
 
 
 
-static void execute_sample(struct demod_gmsk *self, float complex _x)
+static int execute_sample(struct demod_gmsk *self, float complex _x)
 {
 	switch (self->state) {
 	case STATE_DETECTFRAME: return execute_detectframe(self, _x);
@@ -457,6 +457,7 @@ static void execute_sample(struct demod_gmsk *self, float complex _x)
 	case STATE_HELLO:  return execute_rxpayload  (self, _x);
 	default:;
 	}
+	return suo_error(-9999, "GMSK fault state");
 }
 
 

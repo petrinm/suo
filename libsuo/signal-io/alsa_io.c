@@ -180,7 +180,7 @@ static int alsa_io_execute(void *arg)
 				buf_flt, tx_n,
 				samples_to_ns(base_samps + tx_samps, conf->samplerate));
 
-			assert(len <= buf_max);
+			assert(len <= (int)buf_max);
 			cf_to_cs16(buf_flt, buf_int, len);
 			ret = snd_pcm_writei(tx_pcm, buf_int, len);
 			if (ret < 0) {

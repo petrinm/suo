@@ -349,7 +349,7 @@ static int soapysdr_io_execute(void *arg)
 			if (conf->use_time)
 				flags = SOAPY_SDR_HAS_TIME;
 
-			if (0 /*tx_burst_going && ntx.begin > 0*/) {
+			if (tx_burst_going && ret == 0) {
 				/* If end of burst flag wasn't sent in last round,
 				 * send it now together with one dummy sample.
 				 * One sample is sent because trying to send
@@ -366,7 +366,7 @@ static int soapysdr_io_execute(void *arg)
 			}
 
 			if (tx_len > 0) {
-				fprintf(stderr, "TX nsamp: %d\n", tx_len);
+				//fprintf(stderr, "TX nsamp: %d\n", tx_len);
 				// If ntx.end does not point to end of the buffer, a burst has ended
 				if ( 1 /* ntx.end < ntx.len */) {
 					flags |= SOAPY_SDR_END_BURST;
@@ -436,7 +436,7 @@ static int soapysdr_io_set_sample_sink(void *arg, sample_sink_t callback, void *
 {
 	struct soapysdr_io *self = arg;
 	if (callback == NULL || callback_arg == NULL)
-		return suo_error(-3, "NULL");
+		return suo_error(-3, "NULL sample sink");
 	self->sample_sink = callback;
 	self->sample_sink_arg = callback_arg;
 	return 0;
@@ -447,7 +447,7 @@ static int soapysdr_io_set_sample_source(void *arg, sample_source_t callback, vo
 {
 	struct soapysdr_io *self = arg;
 	if (callback == NULL || callback_arg == NULL)
-		return suo_error(-3, "NULL");
+		return suo_error(-3, "NULL sample source");
 	self->sample_source = callback;
 	self->sample_source_arg = callback_arg;
 	return 0;

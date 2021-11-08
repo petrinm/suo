@@ -12,70 +12,14 @@
 
 static const struct frame* received_frame = NULL;
 
-#define RANDOM_BIT()  ((unsigned int)(rand() & 1)
-
-#if 0
-
-const struct transmitter_code dummy_sample_source = {
-	.name = "dummy_sample_sink",
-	.init = dummy_sample_sink_init,
-	.sink_sample = dummy_sink_samples,
-};
-
-const struct receiver_code dummy_sample_sink = {
-	.name = "dummy_sample_sink",
-	.init = dummy_sample_sink_init,
-	.sink_sample = dummy_sink_samples,
-};
-
-
-const struct decoder_code dummy_symbol_sink = {
-	.name = "dummy_symbol_sink",
-	.init = dummy_symbol_sink_init,
-	.sink_symbols = dummy_sink_symbols,
-};
-
-const struct encoder_code dummy_symbol_source = {
-	.name = "dummy_symbol_source",
-	.init = dummy_symbol_source_init,
-	.source_symbols = dummy_source_symbols,
-};
-
-const struct rx_input_code dummy_frame_sink = {
-	.name = "dummy_frame_sink",
-	.init = dummy_frame_sink_init,
-	.sink_frame = dummy_sink_frames,
-};
-#endif
-
-
-#if 0
-struct dummy_frames_source {
-	const struct decoder_code *decoder;
-	void *decoder_arg;
-};
-
-void* dummy_frame_source_init(const void *conf) {
-	(void)conf;
-	struct dummy_frames_source *self = (struct dummy_frames_source*)calloc(1, sizeof(struct dummy_frames_source));
-
-	return self;
-}
-
-static int dummy_source_frame(void* arg, struct frame *frame, size_t maxlen, timestamp_t timenow) {
-	return SUO_OK;
-}
-
-const struct tx_input_code dummy_frame_source = {
-	.name = "dummy_frame_source",
-	.init = dummy_frame_source_init,
-	.source_frame = dummy_source_frame,
-};
-#endif
-
 
 static int source_dummy_symbols(void *arg, symbol_t *symbols, size_t max_symbols, timestamp_t timestamp)
 {
+	static int f = 0;
+	if (f == 1)
+		return 0;
+	 f = 1;
+
 	(void)arg; (void)timestamp;
 	for (int i = 0; i < 32; i++)
 		*symbols++ = (i & 1);
@@ -147,6 +91,9 @@ static void test_gmsk(void)
 
 	sample_t samples[MAX_SAMPLES];
 	{
+
+		timestamp_t time = 10000;
+
 		const struct transmitter_code* gmsk = &mod_gmsk_code;
 		CU_ASSERT(gmsk->name != NULL);
 
@@ -158,15 +105,23 @@ static void test_gmsk(void)
 
 
 		void* gmsk_inst = gmsk->init(gmsk_conf);
-		gmsk->set_symbol_source(gmsk_inst, source_dummy_symbols, 0xdeadbeef);
+		gmsk->set_symbol_source(gmsk_inst, source_dummy_symbols, (void*)0xdeadbeef);
 
+		int ret;
+		unsigned int total_samples = 0; 
+		for (int i = 0; i < 1000; i++) {
 
-		timestamp_t t = 10000;
-		CU_ASSERT(gmsk->source_samples(gmsk_inst, samples, MAX_SAMPLES, t++) > 0);
-		CU_ASSERT(gmsk->source_samples(gmsk_inst, samples, MAX_SAMPLES, t++) > 0);
-		CU_ASSERT(gmsk->source_samples(gmsk_inst, samples, MAX_SAMPLES, t++) > 0);
-		CU_ASSERT(gmsk->source_samples(gmsk_inst, samples, MAX_SAMPLES, t++) > 0);
+			ret = gmsk->source_samples(gmsk_inst, samples, MAX_SAMPLES, time);
+			printf("ret = %d\n", ret);
+			CU_ASSERT_FATAL(ret >= 0);
+			if (ret == 0)
+				break;
 
+			total_samples += ret;
+			time += 1000;
+		}
+		printf("total samples = %u\n", total_samples);
+		CU_ASSERT(total_samples > 0);
 
 		// TODO: Change frequency
 		// gmsk->set_frequency(gmsk_inst, 11e3);

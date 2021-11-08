@@ -80,4 +80,7 @@ int suo_metadata_dump(uint8_t* out);
  */
 int suo_metadata_load(uint8_t* out);
 
+unsigned int suo_metadata_count(const struct frame* frame);
+
+
 #endif /* __SUO_METADATA_H__ */

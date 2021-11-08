@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include <time.h>
 
 #include <CUnit/CUnit.h>
 #include <CUnit/CUnitCI.h>
