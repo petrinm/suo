@@ -168,9 +168,11 @@ fail:
 
 
 
-static int zmq_output_frame(void *arg, const struct frame *frame)
+static int zmq_output_sink_frame(void *arg, const struct frame *frame, timestamp_t timestamp)
 {
 	struct zmq_output *self = (struct zmq_output*)arg;
+
+	suo_frame_print(frame, SUO_PRINT_DATA | SUO_PRINT_COLOR);
 
 	/* Read straight from the subscriber socket
 	 * if decoder thread and its socket is not created */
@@ -220,7 +222,6 @@ const struct rx_output_code zmq_rx_output_code = {
 	.destroy = zmq_output_destroy,
 	.init_conf = init_conf,
 	.set_conf = set_conf,
-	//.set_callbacks = zmq_output_set_callbacks,
-	.frame = zmq_output_frame,
-	.tick = zmq_output_tick
+	.sink_frame = zmq_output_sink_frame,
+	.sink_tick = zmq_output_tick
 };

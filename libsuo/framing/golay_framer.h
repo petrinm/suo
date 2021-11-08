@@ -26,6 +26,9 @@ struct golay_framer_conf {
 	/* Number of dummy bits generated to the tail */
 	unsigned int tail_length;
 
+	/* Additional flags in the golay code */
+	unsigned int golay_flags;
+
 };
 
 /* Module descriptor */

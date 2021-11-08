@@ -29,7 +29,7 @@ struct golay_framer {
 	fec l_viterbi;
 
 	/* Callbacks */
-	CALLBACK(frame_callback_t, frame_source);
+	CALLBACK(frame_source_t, frame_source);
 };
 
 
@@ -114,7 +114,7 @@ static int golay_framer_destroy(void *arg) {
 
 
 
-static int golay_framer_set_frame_source(void *arg, frame_callback_t* callback, void *callback_arg) {
+static int golay_framer_set_frame_source(void *arg, frame_source_t callback, void *callback_arg) {
 	struct golay_framer *self = (struct golay_framer*)arg;
 	self->frame_source = callback;
 	self->frame_source_arg = callback_arg;
@@ -122,7 +122,7 @@ static int golay_framer_set_frame_source(void *arg, frame_callback_t* callback, 
 }
 
 
-static int golay_framer_get_symbols(void *arg, symbol_t* symbols, size_t max_symbols, timestamp_t t) {
+static int golay_framer_source_symbols(void *arg, symbol_t* symbols, size_t max_symbols, timestamp_t t) {
 	struct golay_framer *self = (struct golay_framer*)arg;
 	if (self->frame_source == NULL || self->frame_source_arg == NULL)
 		return suo_error(SUO_ERROR, "No frame source defined!");
@@ -152,14 +152,7 @@ static int golay_framer_get_symbols(void *arg, symbol_t* symbols, size_t max_sym
 	bit_ptr += word_to_lsb_bits(bit_ptr, self->c.sync_len, self->c.sync_word);
 
 	/* Append Golay coded length (+coding flags) */
-	uint32_t coded_len = payload_len;
-#if 0
-	uint32_t meta_coded;
-	if(suo_get_metadata(frame, SUO_META_CODED, &meta_coded))
-		coded_len |= meta_coded;
-#else
-	coded_len |= 0x600;
-#endif
+	uint32_t coded_len = self->c.golay_flags | payload_len;
 	if (self->c.use_rs)
 		coded_len |= 0x200;
 	if (self->c.use_randomizer)
@@ -201,6 +194,11 @@ static int golay_framer_get_symbols(void *arg, symbol_t* symbols, size_t max_sym
 	if (total_bits >= max_symbols)
 		return suo_error(-9999, "Buffer overrun!");
 
+#if 1n
+	printf("OUTPUT SAMPLES:\n");
+	suo_print_symbols(symbols, total_bits);
+#endif
+
 	return total_bits;
 }
 
@@ -213,6 +211,7 @@ const struct golay_framer_conf golay_framer_defaults = {
 	.use_randomizer = 1,
 	.use_rs = 1,
 	.tail_length = 0,
+	.golay_flags = 0,
 };
 
 
@@ -224,15 +223,16 @@ CONFIG_I(use_viterbi)
 CONFIG_I(use_randomizer)
 CONFIG_I(use_rs)
 CONFIG_I(tail_length)
+CONFIG_I(golay_flags)
 CONFIG_END()
 
 
-extern const struct encoder_code golay_framer_code = {
+const struct encoder_code golay_framer_code = {
 	.name = "golay_framer",
 	.init = golay_framer_init,
 	.destroy = golay_framer_destroy,
 	.init_conf = init_conf, // Constructed by CONFIG-macro
 	.set_conf = set_conf, // Constructed by CONFIG-macro
 	.set_frame_source = golay_framer_set_frame_source,
-	.get_symbols = golay_framer_get_symbols,
+	.source_symbols = golay_framer_source_symbols,
 };

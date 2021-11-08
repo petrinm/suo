@@ -1,37 +1,97 @@
-#if 0
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "hdlc_deframer.h"
 #include "suo_macros.h"
 
-struct hdlc_framer {
-	/* configuration */
-	struct hdlc_framer_conf c;
+struct hdlc_deframer {
+	/* Configuration */
+	struct hdlc_deframer_conf c;
 
+	/* State */
+	enum {
+		STATE_RX_SYNC = 0,
+		STATE_RX_PAYLOAD
+	} state;
 	unsigned int shift;
-	unsigned int state;
 	unsigned int bit_idx;
 
-	struct frame;
+	/* Buffers */
+	struct frame* frame;
+
+	/* Callbacks */
+	CALLBACK(frame_source_t, frame_source);
 };
 
-static void* hdlc_framer_init(void* conf_v) {
-	struct hdlc_framer* self = malloc(sizeof(struct hdlc_framer));
-	memset(self, 0, sizeof(struct hdlc_framer));
-	self->c = (struct hdlc_framer_conf*)conf_v;
 
+static void* hdlc_deframer_init(const void* conf_v) {
+	struct hdlc_deframer* self = (struct hdlc_deframer*)calloc(1, sizeof(struct hdlc_deframer));
+	self->c = *(struct hdlc_deframer_conf*)conf_v;
+
+	self->state = STATE_RX_SYNC;
+	//hdlc_deframer_reset(self);
 
 	return self;
 }
 
-static void hdlc_framer_execute(void* arg) {
-	struct hdlc_framer* self = (struct hdlc_framer*)arg;
-	// None
+
+static int hdlc_deframer_destroy(void *arg) {
+	struct hdlc_deframer *self = (struct hdlc_deframer*)arg;
+	suo_frame_destroy(self->frame);
+	self->frame = NULL;
+	free(self);
+	return SUO_OK;
 }
 
-static void hdlc_framer_execute(unsigned int bit) {
+static int hdlc_deframer_reset(void *arg) {
+	struct hdlc_deframer *self = (struct hdlc_deframer*)arg;
+	self->state = STATE_RX_SYNC;
+	self->shift = 0;
+	self->bit_idx = 0;
+	return SUO_OK;
+}
+
+
+static int hdlc_deframer_set_frame_source(void *arg, frame_source_t callback, void *callback_arg) {
+	struct hdlc_deframer *self = (struct hdlc_deframer*)arg;
+	self->frame_source = callback;
+	self->frame_source_arg = callback_arg;
+	return SUO_OK;
+}
+
+
+static int hdlc_deframer_sink_symbol(void* arg, bit_t bit, timestamp_t now) {
+	struct hdlc_deframer* self = (struct hdlc_deframer*)arg;
+	(void)bit; (void)now;
+	return SUO_OK;
+	// Execute
+#if 0
+	if (0) {
+		/* G3RUH decode */
+		lastbit =
+	}
+	else if (1) {
+		/* NRZI decode */
+		bit_t new_bit = !(bit ^ rx->lastbit);
+		rx->lastbit = bit;
+		bit = new_bit;
+	}
+	else if (1) {
+		/* NRZ decode */
+		bit_t new_bit = (bit ^ rx->lastbit);
+		rx->lastbit = bit;
+		bit = new_bit;
+	}
+
 
 	self->shift = (0xFF & (self->shift << 1)) | bit;
 
-	if (state == 0) {
+
+	static bool stuffed;
+
+
+	if (state == STATE_RX_SYNC) {
 		/*
 		 * Looking for start byte
 		 */
@@ -42,13 +102,32 @@ static void hdlc_framer_execute(unsigned int bit) {
 
 		return 0;
 	}
-	else {
+	else if (state == STATE_RX_PAYLOAD) {
 		/*
-		 * Frame...
+		 * Frame
 		 */
 
-	}
+		if (stuffed) {
 
+			if (bit == 1) {
+				// End flag
+				state = stop;
+				ndata = 0;
+			}
+			else {
+
+				stuffed = false;
+			}
+
+			state = STATE_RX_SYNC;
+		}
+		else {
+
+
+			stuffed = true;
+		}
+	}
+#endif
 }
 
 
@@ -60,13 +139,11 @@ CONFIG_BEGIN(hdlc_deframer)
 CONFIG_I(mode)
 CONFIG_END()
 
-extern const struct decoder_code hdlc_deframer_code = {
+const struct decoder_code hdlc_deframer_code = {
 	.name = "hdlc_deframer",
 	.init = hdlc_deframer_init,
 	.destroy = hdlc_deframer_destroy,
 	.init_conf = init_conf, // Constructed by CONFIG-macro
 	.set_conf = set_conf, // Constructed by CONFIG-macro
-	.execute = hdlc_deframer_execute,
+	.sink_symbol = hdlc_deframer_sink_symbol,
 };
-
-#endif

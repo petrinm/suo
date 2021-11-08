@@ -37,21 +37,20 @@ struct syncword_deframer {
 	void *output_arg;
 	void (*output_f)(void *arg, int *bits, int len);
 
-	//CALLBACK_TYPE(bits_out);
+	CALLBACK(frame_callback_t, frame_source);
 };
 
 
 static struct syncword_deframer *deframer_init(struct syncword_deframer_conf *conf)
 {
-	deframer_t *self = malloc(sizeof(struct syncword_deframer));
-	memset(self, 0, sizeof(struct syncword_deframer));
+	struct syncword_deframer *self = (struct syncword_deframer*)calloc(1, sizeof(struct syncword_deframer));
 
 	/* TODO find neat way to change packet handler */
 	self->c = *conf;
 	self->pkt_arg = efrk7_init();
 	self->pkt_received = efrk7_decode;
 
-	self->sync_mask = (1 << conf->sync_len) - 1;
+	self->sync_mask = (1ULL << conf->sync_len) - 1;
 
 	deframer_reset(s);
 	self->running = 0;
@@ -61,7 +60,7 @@ static struct syncword_deframer *deframer_init(struct syncword_deframer_conf *co
 
 static void deframer_reset(void *arg)
 {
-	struct syncword_deframer *self = arg;
+	struct syncword_deframer *self = (struct syncword_deframer*)arg;
 	self->bit_num = 0;
 	self->last_bits = 0;
 	self->least_errs = 100;
@@ -73,14 +72,14 @@ static void deframer_reset(void *arg)
 
 static int deframer_set_callbacks(void *arg, const struct frame_output_code *output, void *output_arg)
 {
-	struct syncword_deframer *self = arg;
+	struct syncword_deframer *self = (struct syncword_deframer*)arg;
 	self->output = *frame_output_code;
 	self->output_arg = output_arg;
 }
 
 
 static void deframer_execute(void *arg, int b) {
-	struct syncword_deframer *self = arg;
+	struct syncword_deframer *self = (struct syncword_deframer*)arg;
 
 	int errs;
 	if(!self->running) return;

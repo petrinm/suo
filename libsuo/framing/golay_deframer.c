@@ -19,16 +19,21 @@ struct golay_deframer {
 	unsigned int frame_pos;
 	unsigned int frame_len;
 
-	unsigned int state;
+	enum {
+		STATE_RX_SYNC = 0,
+		STATE_RX_GOLAY,
+		STATE_RX_PAYLOAD
+	} state;
+
 	unsigned int latest_bits;
-	unsigned int bit_idx;
+	int bit_idx;
 
 	unsigned int coded_len;
 
-	SUO_CALLBACK(bit_sink);
-	SUO_CALLBACK(frame_source);
+	//CALLBACK(bit_sink);
+	//ALLBACK(frame_source);
 
-	CALLBACK(frame_callback_t, frame_sink);
+	CALLBACK(frame_sink_t, frame_sink);
 
 	fec l_rs;
 	fec l_viterbi;
@@ -66,7 +71,7 @@ static void* golay_deframer_init(const void* conf_v) {
 }
 
 
-static int golay_deframer_destroy(void *arg)  {
+static int golay_deframer_destroy(void *arg) {
 	struct golay_deframer *self = (struct golay_deframer*)arg;
 	free(self->data_buffer);
 	//free(self->viterbi_buffer);
@@ -75,20 +80,24 @@ static int golay_deframer_destroy(void *arg)  {
 	if (self->l_viterbi)
 		fec_destroy(self->l_viterbi);
 	free(self);
-	return 0;
+	return SUO_OK;
 }
+
 
 static int golay_deframer_reset(void *arg)  {
 	struct golay_deframer *self = (struct golay_deframer*)arg;
-	self->state = 0;
+	self->state = STATE_RX_SYNC;
 	self->latest_bits = 0;
+	return SUO_OK;
 }
 
-static int golay_deframer_execute(void *arg, symbol_t bit, timestamp_t time)
+
+
+static int golay_deframer_sink_symbol(void *arg, symbol_t bit, timestamp_t time)
 {
 	struct golay_deframer *self = (struct golay_deframer *)arg;
 
-	if (self->state == 0) {
+	if (self->state == STATE_RX_SYNC) {
 		/*
 		 * Looking for syncword
 		 */
@@ -98,7 +107,7 @@ static int golay_deframer_execute(void *arg, symbol_t bit, timestamp_t time)
 		unsigned int sync_errors = __builtin_popcountll((self->latest_bits & self->sync_mask) ^ self->c.sync_word);
 
 		if (sync_errors <= self->c.sync_threshold) {
-			printf("SYNC FOUND! %d\n", sync_errors);
+			//printf("SYNC FOUND! %d\n", sync_errors);
 
 			/* Syncword found, start saving bits when next bit arrives */
 			self->bit_idx = 0;
@@ -108,14 +117,14 @@ static int golay_deframer_execute(void *arg, symbol_t bit, timestamp_t time)
 			self->frame->hdr.timestamp = time;
 			SET_METADATA_UI(self->frame, METADATA_SYNC_ERRORS, sync_errors);
 
-			self->state = 1;
+			self->state = STATE_RX_GOLAY;
 			return 1;
 		}
 
 		return 0;
 
 	}
-	else if (self->state == 1) {
+	else if (self->state == STATE_RX_GOLAY) {
 		/*
 		 * Receiveiving PHY header (lenght bytes)
 		 */
@@ -123,22 +132,23 @@ static int golay_deframer_execute(void *arg, symbol_t bit, timestamp_t time)
 		self->latest_bits = (self->latest_bits << 1) | bit;
 		self->bit_idx++;
 
-		if (self->bit_idx == 24) {
+		if (self->bit_idx >= 24) {
 
 			self->coded_len = self->latest_bits;
 			int golay_errors = decode_golay24(&self->coded_len);
 			if (golay_errors < 0) {
+				printf("GOLAY failed!\n");
 				// TODO: Increase some counter
-				self->state = 0;
+				self->state = STATE_RX_SYNC;
 				return 0;
 			}
-
+			printf("GOLAY error %d\n", golay_errors);
 			// The 8 least signigicant bit indicate the lenght
 			self->frame_len = 0xFF & self->coded_len;
 
 			// Sanity
 			if ((self->frame_len & 0x00) != 0) {
-				self->state = 0;
+				self->state = STATE_RX_SYNC;
 				return 0;
 			}
 
@@ -153,12 +163,12 @@ static int golay_deframer_execute(void *arg, symbol_t bit, timestamp_t time)
 			self->frame_pos = 0;
 			self->latest_bits = 0;
 			self->bit_idx = 0;
-			self->state = 2;
+			self->state = STATE_RX_PAYLOAD;
 		}
 		return 1;
 
 	}
-	else if (self->state == 2) {
+	else if (self->state == STATE_RX_PAYLOAD) {
 		/*
 		 * Receiving payload
 		 */
@@ -167,7 +177,7 @@ static int golay_deframer_execute(void *arg, symbol_t bit, timestamp_t time)
  		self->bit_idx++;
 
 		if (self->bit_idx >= 8) {
-			printf("%02x  ", self->latest_bits);
+			printf("%02x \n", self->latest_bits);
 
 			self->frame->data[self->frame_pos] = self->latest_bits;
 			self->latest_bits = 0;
@@ -177,7 +187,7 @@ static int golay_deframer_execute(void *arg, symbol_t bit, timestamp_t time)
 
 			if (self->frame_pos >= self->frame_len) {
 				self->frame->data_len = self->frame_len;
-				self->state = 0;
+				self->state = STATE_RX_SYNC;
 
 				if (self->c.skip_viterbi == 0 && (self->coded_len & 0x800) != 0) {
 					/* Decode viterbi */
@@ -221,6 +231,7 @@ static int golay_deframer_execute(void *arg, symbol_t bit, timestamp_t time)
 
 
 				int ret = self->frame_sink(self->frame_sink_arg, self->frame, time);
+				suo_frame_clear(self->frame);
 				if (ret < 0) return ret;
 
 				return 0;
@@ -235,7 +246,7 @@ static int golay_deframer_execute(void *arg, symbol_t bit, timestamp_t time)
 }
 
 
-static int golay_deframer_set_frame_sink(void *arg, frame_callback_t callback, void *callback_arg) {
+static int golay_deframer_set_frame_sink(void *arg, frame_sink_t callback, void *callback_arg) {
 	struct golay_deframer *self = (struct golay_deframer *)arg;
 
 	self->frame_sink = callback;
@@ -264,12 +275,12 @@ CONFIG_I(skip_rs)
 CONFIG_END()
 
 
-extern const struct decoder_code golay_deframer_code = {
+const struct decoder_code golay_deframer_code = {
 	.name = "golay_deframer",
 	.init = golay_deframer_init,
 	.destroy = golay_deframer_destroy,
 	.init_conf = init_conf, // Constructed by CONFIG-macro
 	.set_conf = set_conf, // Constructed by CONFIG-macro
 	.set_frame_sink = golay_deframer_set_frame_sink,
-	.execute = golay_deframer_execute,
+	.sink_symbol = golay_deframer_sink_symbol,
 };
