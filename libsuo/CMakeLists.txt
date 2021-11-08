@@ -20,6 +20,7 @@ find_package(ZeroMQ REQUIRED)
 
 add_compile_options(-g -Wall -Wextra)
 
+
 # Setup building of the library
 add_library(suo SHARED
     suo.c
@@ -28,6 +29,7 @@ add_library(suo SHARED
     modem/demod_fsk_corrbank.c
     modem/demod_fsk_mfilt.c
     modem/demod_fsk_quad.c
+    modem/demod_gmsk.c
     modem/mod_fsk.c
     modem/mod_gmsk.c
 #    modem/mod_psk.c
@@ -57,7 +59,7 @@ target_link_libraries(suo ${LIQUID_LIBRARIES})
 # Find ALSA
 find_package(ALSA)
 if (ALSA_FOUND)
-    link_libraries(alsa)
     target_sources(suo PRIVATE signal-io/alsa_io.c)
-    #target_link_libraries(suo PUBLIC ${ALSA_LIBRARY})
+    add_definitions(-DENABLE_ALSA)
+    target_link_libraries(suo ${ALSA_LIBRARIES})
 endif()
