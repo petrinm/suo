@@ -1,5 +1,6 @@
-*.o
-*.a
-core
 *.swp
 build/
+*.gch
+*.xml
+__pycache__
+
