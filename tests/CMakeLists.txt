@@ -6,10 +6,12 @@ set(CMAKE_C_STANDARD 11)
 add_compile_options(-g -Wall -Wextra)
 include_directories(${libsuo_SOURCE_DIR})
 
-link_libraries(suo cunit)
+link_libraries(suo cunit m)
 
 add_executable(test_golay_framing test_golay_framing.c)
 #add_executable(test_hdlc_framing test_hdlc_framing.c)
 add_executable(test_gmsk test_gmsk.c)
 add_executable(test_zmq test_zmq.c)
 add_executable(test_utils test_utils.c)
+add_executable(test_txrx test_txrx.c)
+add_executable(test_ebno test_ebno.c)
