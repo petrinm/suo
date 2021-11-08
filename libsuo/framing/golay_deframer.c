@@ -137,12 +137,12 @@ static int golay_deframer_sink_symbol(void *arg, symbol_t bit, timestamp_t time)
 			self->coded_len = self->latest_bits;
 			int golay_errors = decode_golay24(&self->coded_len);
 			if (golay_errors < 0) {
-				printf("GOLAY failed!\n");
+				//printf("GOLAY failed!\n");
 				// TODO: Increase some counter
 				self->state = STATE_RX_SYNC;
 				return 0;
 			}
-			printf("GOLAY error %d\n", golay_errors);
+			//printf("GOLAY error %d\n", golay_errors);
 			// The 8 least signigicant bit indicate the lenght
 			self->frame_len = 0xFF & self->coded_len;
 
@@ -177,7 +177,7 @@ static int golay_deframer_sink_symbol(void *arg, symbol_t bit, timestamp_t time)
  		self->bit_idx++;
 
 		if (self->bit_idx >= 8) {
-			printf("%02x \n", self->latest_bits);
+			//printf("%02x \n", self->latest_bits);
 
 			self->frame->data[self->frame_pos] = self->latest_bits;
 			self->latest_bits = 0;
@@ -237,8 +237,8 @@ static int golay_deframer_sink_symbol(void *arg, symbol_t bit, timestamp_t time)
 				return 0;
 			}
 
-			return 1;
 		}
+		return 1;
 
 	}
 

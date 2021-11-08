@@ -125,17 +125,9 @@ struct decoder_code {
 	int   (*set_frame_sink) (void *, frame_sink_t callback, void *arg);
 	//int   (*set_frame_source) (void *, const struct rx_output_code *source, void *source_arg);
 
-	/* Decode a frame.
-	 * Input frame data is soft decision bits,
-	 * output frame data is decoded data bytes.
-	 * Return negative value if decoding failed. */
-	//int   (*decode)  (void *, const struct frame *in, struct frame *out);
-
 	symbol_sink_t sink_symbol;
 	symbol_sink_t sink_soft_symbol;
 
-	//int   (*execute)  (void *, bit_t bit, timestamp_t now);
-	//int(*execute_soft)(void *, bit_t bit, timestamp_t now);
 };
 
 
@@ -173,17 +165,9 @@ struct receiver_code {
 	// Set callback to an rx_output module which is called when a frame has been received
 	int   (*set_symbol_sink) (void *, symbol_sink_t callback, void* arg);
 	//int   (*set_soft_symbol_sink) (void *, const struct decoder_code *, void *rx_output_arg);
-	//int   (*set_sample_source)(void*);
-
-	// Execute the receiver for a buffer of input signal
-	//int   (*execute)       (void *, const sample_t *samp, size_t nsamp, timestamp_t timestamp);
 
 	sample_sink_t sink_samples;
 };
-
-
-#define DEFINE_CALLBACK(TYPE) \
-	s
 
 
 /* ------------------------------------------
@@ -347,7 +331,8 @@ int suo_error(int err_code, const char* err_msg);
  * Something like this could be useful for showing diagnostics
  * such as constellations in end applications as well,
  * so some more general way would be nice. */
-void print_samples(unsigned stream, sample_t *samples, size_t len);
+void suo_print_samples(unsigned stream, sample_t *samples, size_t len);
+void suo_print_symbols(symbol_t *symbols, size_t len);
 void suo_frame_print(const struct frame* frame, unsigned int flags);
 
 #endif

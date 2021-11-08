@@ -1,10 +1,10 @@
-#include "demod_fsk_mfilt.h"
-#include "suo_macros.h"
 #include <string.h>
 #include <assert.h>
 #include <stdio.h> // for debug prints only
 #include <liquid/liquid.h>
 
+#include "demod_fsk_mfilt.h"
+#include "suo_macros.h"
 
 #define FRAMELEN_MAX 0x900
 #define OVERSAMPLING 4
@@ -12,13 +12,16 @@
 
 static const float pi2f = 6.283185307179586f;
 
+
 struct demod_fsk_mfilt {
 	/* Configuration */
 	struct fsk_demod_mfilt_conf c;
 
 	//float resamprate;
-	unsigned resampint;
-	float nco_1Hz, afc_speed;
+	timestamp_t    sample_ns;
+	unsigned       resampint;
+	float          nco_1Hz;
+	float          afc_speed;
 
 	/* Deframer state */
 	uint64_t latest_bits;
@@ -36,9 +39,6 @@ struct demod_fsk_mfilt {
 	/* General metadata */
 	float est_power; // Running estimate of the signal power
 
-	//symbol_callback;
-	//softsymbol_callback;
-
 	/* liquid-dsp objects */
 	nco_crcf l_nco;
 	resamp_crcf l_resamp;
@@ -46,8 +46,8 @@ struct demod_fsk_mfilt {
 	firfilt_rrrf l_eqfir;
 
 	/* Callbacks */
-	struct rx_output_code output;
-	void *output_arg;
+	CALLBACK(symbol_sink_t, symbol_sink);
+	CALLBACK(soft_symbol_sink_t, soft_symbol_sink);
 
 	/* Buffers */
 	struct frame frame;
@@ -89,24 +89,27 @@ static void *demod_fsk_mfilt_init(const void *conf_v)
 	c = self->c = *(const struct fsk_demod_mfilt_conf *)conf_v;
 
 	/* Configure a resampler for a fixed oversampling ratio */
-	float resamprate = c.symbolrate * OVERSAMPLING / c.samplerate;
+	float resamprate = c.symbol_rate * OVERSAMPLING / c.sample_rate;
 	self->l_resamp = resamp_crcf_create(resamprate, 25, 0.4f / OVERSAMPLING, 60.0f, 32);
 	/* Calculate maximum number of output samples after feeding one sample
 	 * to the resampler. This is needed to allocate a big enough array. */
 	self->resampint = ceilf(resamprate);
 
+
+	self->sample_ns = roundf(1.0e9 / self->c.sample_rate);
+
 	/* NCO:
 	 * Limit AFC range to half of symbol rate to keep it
 	 * from wandering too far */
-	self->nco_1Hz = pi2f / c.samplerate;
-	self->freq_min = self->nco_1Hz * (c.center_freq - 0.5f*c.symbolrate);
-	self->freq_max = self->nco_1Hz * (c.center_freq + 0.5f*c.symbolrate);
-	self->freq_center = self->nco_1Hz * c.center_freq;
+	self->nco_1Hz = pi2f / c.sample_rate;
+	self->freq_min = self->nco_1Hz * (c.center_frequency - 0.5f*c.symbol_rate);
+	self->freq_max = self->nco_1Hz * (c.center_frequency + 0.5f*c.symbol_rate);
+	self->freq_center = self->nco_1Hz * c.center_frequency;
 	self->l_nco = nco_crcf_create(LIQUID_NCO);
 	/* afc_speed is maximum adjustment of frequency per input sample.
 	 * Convert Hz/sec into it. */
-	float afc_hzsec = 0.01f * c.symbolrate * c.symbolrate;
-	self->afc_speed = self->nco_1Hz * afc_hzsec / c.samplerate;
+	float afc_hzsec = 0.01f * c.symbol_rate * c.symbol_rate;
+	self->afc_speed = self->nco_1Hz * afc_hzsec / c.sample_rate;
 
 	nco_crcf_set_frequency(self->l_nco, self->freq_center);
 
@@ -128,18 +131,16 @@ static int demod_fsk_mfilt_destroy(void *arg)
 }
 
 
-static int demod_fsk_mfilt_execute(void *arg, const sample_t *samples, size_t nsamp, timestamp_t timestamp)
+static int demod_fsk_mfilt_sink_samples(void *arg, const sample_t *samples, size_t nsamp, timestamp_t timestamp)
 {
 	struct demod_fsk_mfilt *self = arg;
-	self->output.tick(self->output_arg, timestamp);
+	//self->output.tick(self->output_arg, timestamp);
 
 	/* Copy some often used variables to local variables */
 	float est_power = self->est_power;
 
 	/* Allocate small buffers from stack */
 	sample_t samples2[self->resampint];
-
-	timestamp_t sample_ns = roundf(1.0e9f / self->c.samplerate);
 
 	size_t si;
 	for(si = 0; si < nsamp; si++) {
@@ -202,10 +203,10 @@ static int demod_fsk_mfilt_execute(void *arg, const sample_t *samples, size_t ns
 			/* Feed-forward timing synchronizer
 			 * --------------------------------
 			 * Feed a rectified demodulated signal into a comb filter.
-			 * When the output of the comb filter peaks, take a symbol.
+			 * When the output outputoutputof the comb filter peaks, take a symbol.
 			 * When a frame is detected, keep timing free running
 			 * for rest of the frame. */
-			unsigned synced = 0;
+			bool synced = false;
 			float synced_sample = 0;
 
 			unsigned ss_p = self->ss_p;
@@ -219,15 +220,15 @@ static int demod_fsk_mfilt_execute(void *arg, const sample_t *samples, size_t ns
 			self->ss_comb[ss_p] = comb;
 			self->ss_p = ss_p;
 
-			if (!self->receiver_lock) {
+			if (self->receiver_lock == false) {
 				if(comb_prev > comb && comb_prev > comb_prev2) {
-					synced = 1;
+					synced = true;
 					synced_sample = self->demod_prev;
 					self->ss_ps = (ss_p+OVERSAMPLING-1) % OVERSAMPLING;
 				}
 			} else {
 				if(ss_p == self->ss_ps) {
-					synced = 1;
+					synced = true;
 					synced_sample = demod;
 				}
 			}
@@ -245,23 +246,25 @@ static int demod_fsk_mfilt_execute(void *arg, const sample_t *samples, size_t ns
 
 			/* Decisions and deframing
 			 * ----------------------- */
-			if (synced == 1) {
+			if (synced == true) {
+
 				/* Process one output symbol from synchronizer */
 				bit_t decision = (synced_sample >= 0) ? 1 : 0;
-				//if (self->deframer->execute(self, decision, timestamp)) {
-				if (0) {
+				printf("%d ", decision);
+				if (self->symbol_sink(self->symbol_sink_arg, decision, timestamp)) {
 
 					/* If this was the first sync, collect store some metadata. */
 					if (self->receiver_lock == false) {
 						float cfo = (nco_crcf_get_frequency(self->l_nco) - self->freq_center) / self->nco_1Hz;
 						float rssi = 10.0f * log10f(self->est_power);
-						SET_METADATA_F(&self->frame, METADATA_POWER, cfo);
-						SET_METADATA_F(&self->frame, METADATA_RSSI, rssi);
+						//SET_METADATA_F(self->frame, METADATA_POWER, cfo);
+						//SET_METADATA_F(self->frame, METADATA_RSSI, rssi);
 					}
-
+					printf("SYNC!\n");
 					self->receiver_lock = true;
 				}
 				else {
+					printf("SYNC LOST\n");
 					/* No sync, no lock */
 					self->receiver_lock = false;
 				}
@@ -269,7 +272,7 @@ static int demod_fsk_mfilt_execute(void *arg, const sample_t *samples, size_t ns
 
 			self->demod_prev = demod;
 		}
-		timestamp += sample_ns;
+		timestamp += self->sample_ns;
 	}
 
 	return 0;
@@ -277,27 +280,27 @@ static int demod_fsk_mfilt_execute(void *arg, const sample_t *samples, size_t ns
 
 
 
-static int demod_fsk_mfilt_set_callbacks(void *arg, const struct rx_output_code *output, void *output_arg)
+static int demod_fsk_mfilt_set_symbol_sink(void *arg, symbol_sink_t callback, void *callback_arg)
 {
 	struct demod_fsk_mfilt *self = arg;
-	self->output = *output;
-	self->output_arg = output_arg;
-	return 0;
+	self->symbol_sink = callback;
+	self->symbol_sink_arg = callback_arg;
+	return SUO_OK;
 }
 
 
 const struct fsk_demod_mfilt_conf fsk_demod_mfilt_defaults = {
-	.samplerate = 1e6,
-	.symbolrate = 9600,
+	.sample_rate = 1e6,
+	.symbol_rate = 9600,
 	.bits_per_symbol = 2,
-	.center_freq = 100000,
+	.center_frequency = 100000,
 };
 
 CONFIG_BEGIN(fsk_demod_mfilt)
-CONFIG_F(samplerate)
-CONFIG_F(symbolrate)
+CONFIG_F(sample_rate)
+CONFIG_F(symbol_rate)
 CONFIG_I(bits_per_symbol)
-CONFIG_F(center_freq)
+CONFIG_F(center_frequency)
 CONFIG_END()
 
 
@@ -307,6 +310,6 @@ const struct receiver_code demod_fsk_mfilt_code = {
 	.destroy = demod_fsk_mfilt_destroy,
 	.init_conf = init_conf, // Constructed by CONFIG-macro
 	.set_conf = set_conf, // Constructed by CONFIG-macro
-	.set_callbacks = demod_fsk_mfilt_set_callbacks,
-	.execute = demod_fsk_mfilt_execute
+	.set_symbol_sink = demod_fsk_mfilt_set_symbol_sink,
+	.sink_samples = demod_fsk_mfilt_sink_samples
 };

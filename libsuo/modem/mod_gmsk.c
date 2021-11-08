@@ -13,13 +13,16 @@
 
 #define MAX_SYMBOLS   0x900
 
+static const float pi2f = 6.283185307179586f;
+
 struct mod_gmsk {
 	/* Configuration */
 	struct mod_gmsk_conf c;
 	uint32_t        symrate; // integer symbol rate
-	float           sample_ns; // Sample duration in ns
+	timestamp_t     sample_ns; // Sample duration in ns
 	unsigned int    mod_rate; // GMSK modulator samples per symbols rate
 	unsigned int    mod_max_samples; // Maximum number of samples generated from single symbol
+	float           nco_1Hz;
 
 	/* State */
 	enum {
@@ -38,8 +41,8 @@ struct mod_gmsk {
 	nco_crcf        l_nco; // NCO for mixing up the signal
 
 	/* Callbacks */
-	CALLBACK(symbol_callback_t, symbol_source);
-	CALLBACK(tick_callback_t, tick);
+	CALLBACK(symbol_source_t, symbol_source);
+	CALLBACK(tick_sink_t, tick);
 };
 
 
@@ -50,7 +53,8 @@ static void* mod_gmsk_init(const void *conf_v)
 	memset(self, 0, sizeof(struct mod_gmsk));
 
 	self->c = *(const struct mod_gmsk_conf*)conf_v;
-	self->sample_ns = 1.0e9f / self->c.samplerate;
+	self->sample_ns = round(1.0e9 / self->c.samplerate);
+	self->nco_1Hz = pi2f / self->c.samplerate;
 
 	const float samples_per_symbol = self->c.samplerate / self->c.symbolrate;
 	self->mod_rate = (unsigned int)samples_per_symbol + 1;
@@ -73,7 +77,7 @@ static void* mod_gmsk_init(const void *conf_v)
 	/*
 	 * Init GMSK modulator
 	 */
-	self->l_mod = gmskmod_create(self->mod_rate, 31, self->c.bt);
+	self->l_mod = gmskmod_create(self->mod_rate, 15, self->c.bt);
 
 
 
@@ -94,6 +98,7 @@ static void* mod_gmsk_init(const void *conf_v)
 	 * Init NCO for up mixing
 	 */
 	self->l_nco = nco_crcf_create(LIQUID_NCO);
+	nco_crcf_set_frequency(self->l_nco, self->nco_1Hz * self->c.centerfreq);
 
 	return self;
 }
@@ -120,8 +125,6 @@ static int mod_gmsk_destroy(void *arg)
 }
 
 
-#define SUO_CLBK_FREQUENCY       0
-#define SUO_CLBK_INPUT           1
 #if 0
 static int set_callbacks(void *arg, unsigned int callback, const struct tx_input_code *input, void *input_arg)
 {
@@ -132,26 +135,12 @@ static int set_callbacks(void *arg, unsigned int callback, const struct tx_input
 		// TODO
 		return 0;
 	}
-	if (callback == SUO_CLBK_INPUT) {
-		//self->symbol_source = *input;
-		self->symbol_source_arg = input_arg;
-		return 0;
-	}
 	return -1; // No such
 }
-#else
-
-/*/static int set_callbacks(void *arg, const struct encoder_code *input, void *input_arg)
-{
-	struct mod_gmsk *self = (struct mod_gmsk *)arg;
-	self->symbol_source = *input;
-	self->symbol_source_arg = input_arg;
-	return 0;
-}*/
-
 #endif
 
-static int mod_gmsk_set_symbol_source(void *arg, const symbol_callback_t *callback, void *callback_arg) {
+
+static int mod_gmsk_set_symbol_source(void *arg, symbol_source_t callback, void *callback_arg) {
 	struct mod_gmsk *self = (struct mod_gmsk *)arg;
 	self->symbol_source = callback;
 	self->symbol_source_arg = callback_arg;
@@ -179,7 +168,6 @@ static int mod_gmsk_source_samples(void *arg, sample_t *samples, size_t max_samp
 		int ret = self->symbol_source(self->symbol_source_arg, self->symbols, MAX_SYMBOLS, time_end);
 		//int ret = self->symbol_source.get(self->);
 
-		printf("ret %d\n", ret);
 		if (ret > 0) {
 			if (ret >= MAX_SYMBOLS)
 				return suo_error(SUO_ERROR, "!");
@@ -218,7 +206,7 @@ static int mod_gmsk_source_samples(void *arg, sample_t *samples, size_t max_samp
 			// Interpolate to final sample rate
 			unsigned int num_written = 0;
 			sample_t *si = mod_samples, *so = samples;
-			for (int i = 0; i < self->mod_rate; i++) {
+			for (unsigned int i = 0; i < self->mod_rate; i++) {
 				unsigned int more;
 				resamp_crcf_execute(self->l_resamp, *(si++), so, &more);
 				so += more;
@@ -230,16 +218,20 @@ static int mod_gmsk_source_samples(void *arg, sample_t *samples, size_t max_samp
 
 #if 0 // TODO
 			// Start ramp up
-			if (symbol_count < self->c.ramp)
-				new_samples[i] *= liquid_hamming(self->symbol_counter*self->k + i, 2*self->m*self->k);
+			if (symbols_i < 0) {
+				for (unsigned int i = 0; i < num_written; i++)
+					samples[i] *= liquid_hamming(self->symbol_counter*self->k + i, 2*self->m*self->k);
+			}
 
 			// End ramp down
 			if (self->symbol_counter >= self->m)
  				new_samples[i] *= liquid_hamming(self->m*self->k + (self->symbol_counter-self->m)*self->k + i, 2*self->m*self->k);
 #endif
 
+			samples += num_written;
 			nsamples += num_written;
-			if (self->symbols_i == 0) {
+			if (self->symbols_i == self->symbols_len) {
+				self->symbols_i = 0;
 				self->state = IDLE;
 				break;
 			}

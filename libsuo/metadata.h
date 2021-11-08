@@ -70,7 +70,7 @@ struct metadata* suo_metadata_set(struct frame* frame, unsigned ident, unsigned 
 
 /*
  */
-void suo_metadata_print(struct frame* frame);
+void suo_metadata_print(const struct frame* frame);
 
 /*
  */

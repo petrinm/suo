@@ -1,9 +1,11 @@
 
-#include "suo.h"
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+
+#include "suo.h"
+#include "metadata.h"
 
 #define SUO_COLORS
 
@@ -26,7 +28,7 @@ struct metadata* suo_metadata_set(struct frame* frame, unsigned ident, unsigned 
 }
 
 
-unsigned int suo_metadata_count(struct frame* frame) {
+unsigned int suo_metadata_count(const struct frame* frame) {
 	struct metadata* m = frame->metadata;
 	if (m == NULL)
 		return 0;
@@ -39,7 +41,7 @@ unsigned int suo_metadata_count(struct frame* frame) {
 	return mi;
 }
 
-void suo_metadata_name(struct metadata* m, char* name) {
+void suo_metadata_name(const struct metadata* m, char* name) {
 	switch (m->ident) {
 	case METADATA_ID: strcpy(name, "id"); break;
 	case METADATA_MODE: strcpy(name, "mode"); break;
@@ -57,11 +59,11 @@ void suo_metadata_name(struct metadata* m, char* name) {
 
 
 
-void suo_metadata_print(struct frame* frame /*, unsigned int flags*/ ) {
+void suo_metadata_print(const struct frame* frame /*, unsigned int flags*/ ) {
 	assert(frame != NULL);
 
 	char name[32];
-	struct metadata* m = frame->metadata;
+	const struct metadata* m = frame->metadata;
 	if (m == NULL)
 		return;
 

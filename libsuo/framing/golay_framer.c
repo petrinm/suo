@@ -194,7 +194,7 @@ static int golay_framer_source_symbols(void *arg, symbol_t* symbols, size_t max_
 	if (total_bits >= max_symbols)
 		return suo_error(-9999, "Buffer overrun!");
 
-#if 1n
+#if 0
 	printf("OUTPUT SAMPLES:\n");
 	suo_print_symbols(symbols, total_bits);
 #endif

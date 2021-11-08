@@ -82,44 +82,53 @@ void suo_frame_print(const struct frame* frame, unsigned int flags) {
 	if (frame == NULL)
 		return;
 
+	FILE * stream = stdout;
+
 #ifdef SUO_COLORS
-	printf((flags & SUO_PRINT_COLOR) ? "\033[0;36m" : "\033[0;32m");
+	fprintf(stream, (flags & SUO_PRINT_COLOR) ? "\033[0;36m" : "\033[0;32m");
 #endif
 
 	if (flags & SUO_PRINT_COMPACT) {
-		printf("Frame #%-6u %3d bytes, time: %-10lu\n",
+		fprintf(stream, "Frame #%-6u %3d bytes, time: %-10lu\n",
 			frame->hdr.id, frame->data_len, frame->hdr.timestamp);
-#ifdef SUO_COLORS
-		printf("\033[0m"); // Reset color modificator
-#endif
-		return;
+		goto exit;
 	}
 
-	printf("\n####\n");
-	printf("# Frame #%-6u %3d bytes, time: %-10lu\n",
+	fprintf(stream, "\n####\n");
+	fprintf(stream, "# Frame #%-6u %3d bytes, time: %-10lu\n",
 		frame->hdr.id, frame->data_len, frame->hdr.timestamp);
 
 	if (flags & SUO_PRINT_METADATA) {
-		printf("Metadata:\n    ");
+		fprintf(stream, "Metadata:\n    ");
 		if (frame->metadata[0].ident != 0)
 			suo_metadata_print(frame);
 		else
-			printf("(none)");
-		printf("\n");
+			fprintf(stream, "(none)");
+		fprintf(stream, "\n");
 	}
 
 #define NUM_COLUMNS   32
 
 	if (flags & SUO_PRINT_DATA) {
-		printf("Data:\n    ");
+		fprintf(stream, "Data:\n    ");
 		for (unsigned int i = 0; i < frame->data_len; i++) {
-			printf("%02x", frame->data[i]);
-			printf(((i % NUM_COLUMNS) == NUM_COLUMNS - 1) ? "\n    " : " ");
+			fprintf(stream, "%02x", frame->data[i]);
+			fprintf(stream, ((i % NUM_COLUMNS) == NUM_COLUMNS - 1) ? "\n    " : " ");
 		}
-		printf("\n");
+		fprintf(stream, "\n");
 	}
 
+exit:
 #ifdef SUO_COLORS
-	printf("\033[0m"); // Reset color modificator
+	fprintf(stream, "\033[0m"); // Reset color modificator
 #endif
+	fflush(stream);
+}
+
+
+
+void suo_print_symbols(symbol_t *symbols, size_t len) {
+	while (len-- > 0)
+		printf("%d ", *(symbols++));
+	printf("\n\n");
 }

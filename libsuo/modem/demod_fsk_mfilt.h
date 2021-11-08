@@ -12,12 +12,12 @@ struct fsk_demod_mfilt_conf {
 	/*
 	 * Input IQ sample rate as samples per second.
 	 */
-	float samplerate;
+	float sample_rate;
 
 	/*
 	 * Symbol rate as symbols per second
 	 */
-	float symbolrate;
+	float symbol_rate;
 
 	/*
 	 * Number of bit in one symbol (symbol complexity)
@@ -27,7 +27,7 @@ struct fsk_demod_mfilt_conf {
 	/*
 	 * Signal center frequency as Hz
 	 */
-	float center_freq;
+	float center_frequency;
 
 };
 

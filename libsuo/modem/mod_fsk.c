@@ -24,8 +24,7 @@ struct mod_fsk {
 	nco_crcf l_nco;
 
 	/* Callbacks */
-	struct tx_input_code input;
-	void *input_arg;
+	CALLBACK(symbol_source_t, symbol_source);
 
 	/* Buffers */
 	struct frame frame;
@@ -36,7 +35,7 @@ struct mod_fsk {
 
 static void* mod_fsk_init(const void *conf_v)
 {
-	struct mod_fsk *self = malloc(sizeof(struct mod_fsk));
+	struct mod_fsk *self = (struct mod_fsk *)malloc(sizeof(struct mod_fsk));
 	if(self == NULL) return NULL;
 	memset(self, 0, sizeof(struct mod_fsk));
 
@@ -61,26 +60,26 @@ static void* mod_fsk_init(const void *conf_v)
 
 static int mod_fsk_destroy(void *arg)
 {
-	struct mod_fsk *self = arg;
+	struct mod_fsk *self = (struct mod_fsk *)arg;
 	nco_crcf_destroy(self->l_nco);
 	/* TODO (low priority since memory gets freed in the end anyway) */
 	return 0;
 }
 
 
-static int set_callbacks(void *arg, const struct tx_input_code *input, void *input_arg)
+static int mod_fsk_set_symbol_source(void *arg, symbol_source_t callback, void *callback_arg)
 {
-	struct mod_fsk *self = arg;
-	self->input = *input;
-	self->input_arg = input_arg;
+	struct mod_fsk *self = (struct mod_fsk *)arg;
+	self->symbol_source = callback;
+	self->symbol_source_arg = callback_arg;
 	return 0;
 }
 
-
-static tx_return_t mod_fsk_execute(void *arg, sample_t *samples, size_t maxsamples, timestamp_t timestamp)
+static int mod_fsk_source_samples(void *arg, sample_t *samples, size_t maxsamples, timestamp_t timestamp)
 {
-	struct mod_fsk *self = arg;
-	self->input.tick(self->input_arg, timestamp);
+	struct mod_fsk *self = (struct mod_fsk *)arg;
+	//if (self->tick != NULL)
+	//	self->tick(self->input_arg, timestamp);
 
 	size_t nsamples = 0;
 
@@ -97,7 +96,7 @@ static tx_return_t mod_fsk_execute(void *arg, sample_t *samples, size_t maxsampl
 		 * Idle (check for now incoming frames)
 		 */
 		const timestamp_t time_end = timestamp + (timestamp_t)(self->sample_ns * maxsamples);
-		int ret = self->input.get_frame(self->input_arg, &self->frame, FRAMELEN_MAX, time_end);
+		int ret = -1; // self->symbol_source(self->symbol_source_arg, &self->frame, time_end);
 		if (ret > 0) {
 			assert(ret <= FRAMELEN_MAX);
 			transmitting = 1;
@@ -147,7 +146,7 @@ static tx_return_t mod_fsk_execute(void *arg, sample_t *samples, size_t maxsampl
 	self->framelen = framelen;
 	self->framepos = framepos;
 	self->symphase = symphase;
-	return (tx_return_t){ .len = maxsamples, .begin=0, .end = nsamples };
+	return nsamples;
 }
 
 
@@ -176,6 +175,6 @@ const struct transmitter_code mod_fsk_code = {
 	.destroy = mod_fsk_destroy,
 	.init_conf = init_conf, // Generate by the CONFIG-macro
 	.set_conf = set_conf, // Generate by the CONFIG-macro
-	.set_callbacks = set_callbacks,
-	.execute = mod_fsk_execute
+	.set_symbol_source = mod_fsk_set_symbol_source,
+	.source_samples = mod_fsk_source_samples
 };
