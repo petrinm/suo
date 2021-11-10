@@ -11,35 +11,21 @@
 
 
 struct metadata* suo_metadata_set(struct frame* frame, unsigned ident, unsigned type) {
-	struct metadata* m = frame->metadata;
-	if (m == NULL)
-		m = frame->metadata = calloc(1, MAX_METADATA * sizeof(struct metadata));
+	if (frame->metadata == NULL)
+		frame->metadata = calloc(1, MAX_METADATA * sizeof(struct metadata));
 
-	for (int mi = 0; mi < MAX_METADATA; mi++) {
-		if (m->type == 0) {
-			m->type = type;
-			m->ident = ident;
-			return m;
-		}
-		m++;
+	if (frame->metadata_len < MAX_METADATA) {
+		struct metadata* m = &frame->metadata[frame->metadata_len++];
+		m->type = type;
+		m->ident = ident;
+		return m;
 	}
+
 	static struct metadata none;
 	return &none;
 }
 
 
-unsigned int suo_metadata_count(const struct frame* frame) {
-	struct metadata* m = frame->metadata;
-	if (m == NULL)
-		return 0;
-	unsigned int mi = 0;
-	for (; mi < MAX_METADATA; mi++) {
-		if (m->type == 0)
-			return mi;
-		m++;
-	}
-	return mi;
-}
 
 void suo_metadata_name(const struct metadata* m, char* name) {
 	switch (m->ident) {
@@ -63,11 +49,11 @@ void suo_metadata_print(const struct frame* frame /*, unsigned int flags*/ ) {
 	assert(frame != NULL);
 
 	char name[32];
-	const struct metadata* m = frame->metadata;
-	if (m == NULL)
+	if (frame->metadata == NULL)
 		return;
 
-	for (int mi = 0; mi < MAX_METADATA; mi++) {
+	for (int mi = 0; mi < frame->metadata_len; mi++) {
+		const struct metadata* m = &frame->metadata[mi];
 
 		if (m->ident == 0)
 			break;
@@ -77,12 +63,11 @@ void suo_metadata_print(const struct frame* frame /*, unsigned int flags*/ ) {
 		suo_metadata_name(m, name);
 
 		switch (m->type) {
-	 	case METATYPE_FLOAT:  printf("%s = %f", name, m->fl); break;
-	 	case METATYPE_DOUBLE: printf("%s = %lf", name, m->dl); break;
-	 	case METATYPE_INT:    printf("%s = %d", name, m->i); break;
-	 	case METATYPE_UINT:   printf("%s = %d", name, m->ui); break;
+	 	case METATYPE_FLOAT:  printf("%s = %f", name, m->v_float); break;
+	 	case METATYPE_DOUBLE: printf("%s = %lf", name, m->v_double); break;
+	 	case METATYPE_INT:    printf("%s = %d", name, m->v_int); break;
+	 	case METATYPE_UINT:   printf("%s = %u", name, m->v_uint); break;
+	 	case METATYPE_TIME:   printf("%s = %lu", name, m->v_time); break;
 		}
-
-		m++;
 	}
 }

@@ -54,8 +54,8 @@ void test_zmq_simple(void) {
 	 */
 	struct frame* out_frame = suo_frame_new(256);
 	out_frame->hdr.timestamp = time;
-	SET_METADATA_F(out_frame, METADATA_CFO, 12.345);
-	SET_METADATA_F(out_frame, METADATA_RSSI, -123.4);
+	SET_METADATA_FLOAT(out_frame, METADATA_CFO, 12.345);
+	SET_METADATA_FLOAT(out_frame, METADATA_RSSI, -123.4);
 	for (int i = 0; i < 64; i++)
 		out_frame->data[i] = rand() % 256;
 	out_frame->data_len = 64;

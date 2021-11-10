@@ -18,7 +18,7 @@ void ASSERT_METADATA_UINT(const struct frame *frame, unsigned int ident, unsigne
 		const struct metadata* meta = &frame->metadata[i];
 		if (meta->ident == ident) {
 			CU_ASSERT(meta->type == METATYPE_UINT);
-			CU_ASSERT(meta->ui == value);
+			CU_ASSERT(meta->v_uint == value);
 			return;
 		}
 	}
@@ -30,7 +30,7 @@ void ASSERT_METADATA_INT(const struct frame *frame, unsigned int ident, int valu
 		const struct metadata* meta = &frame->metadata[i];
 		if (meta->ident == ident) {
 			CU_ASSERT(meta->type == METATYPE_INT);
-			CU_ASSERT(meta->i == value);
+			CU_ASSERT(meta->v_int == value);
 			return;
 		}
 	}
@@ -42,7 +42,7 @@ void ASSERT_METADATA_FLOAT(const struct frame *frame, unsigned int ident, float 
 		const struct metadata* meta = &frame->metadata[i];
 		if (meta->ident == ident) {
 			CU_ASSERT(meta->type == METATYPE_FLOAT);
-			CU_ASSERT(meta->fl == value);
+			CU_ASSERT(meta->v_float == value);
 			return;
 		}
 	}
@@ -54,7 +54,7 @@ void ASSERT_METADATA_DOUBLE(const struct frame *frame, unsigned int ident, doubl
 		const struct metadata* meta = &frame->metadata[i];
 		if (meta->ident == ident) {
 			CU_ASSERT(meta->type == METATYPE_DOUBLE);
-			CU_ASSERT(meta->dl == value);
+			CU_ASSERT(meta->v_double == value);
 			return;
 		}
 	}

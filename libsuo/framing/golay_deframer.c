@@ -115,7 +115,7 @@ static int golay_deframer_sink_symbol(void *arg, symbol_t bit, timestamp_t time)
 
 			//
 			self->frame->hdr.timestamp = time;
-			SET_METADATA_UI(self->frame, METADATA_SYNC_ERRORS, sync_errors);
+			SET_METADATA_UINT(self->frame, METADATA_SYNC_ERRORS, sync_errors);
 
 			self->state = STATE_RX_GOLAY;
 			return 1;
@@ -152,8 +152,8 @@ static int golay_deframer_sink_symbol(void *arg, symbol_t bit, timestamp_t time)
 				return 0;
 			}
 
-			SET_METADATA_UI(self->frame, METADATA_GOLAY_CODED, self->coded_len);
-			SET_METADATA_UI(self->frame, METADATA_GOLAY_ERRORS, golay_errors);
+			SET_METADATA_UINT(self->frame, METADATA_GOLAY_CODED, self->coded_len);
+			SET_METADATA_UINT(self->frame, METADATA_GOLAY_ERRORS, golay_errors);
 
 			// Receive double number of bits if viterbi is used
 			if ((self->coded_len & 0x800) != 0)
@@ -224,8 +224,8 @@ static int golay_deframer_sink_symbol(void *arg, symbol_t bit, timestamp_t time)
 						if(v1 != v2) octet_errors++;
 					}
 
-					SET_METADATA_I(self->frame, METADATA_RS_BIT_ERRORS, bit_errors);
-					SET_METADATA_I(self->frame, METADATA_RS_OCTET_ERRORS, octet_errors);
+					SET_METADATA_UINT(self->frame, METADATA_RS_BIT_ERRORS, bit_errors);
+					SET_METADATA_UINT(self->frame, METADATA_RS_OCTET_ERRORS, octet_errors);
 #endif
 				}
 

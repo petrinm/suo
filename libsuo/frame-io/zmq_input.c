@@ -137,7 +137,7 @@ int suo_zmq_send_frame(void* sock, const struct frame *frame) {
 		return 0;
 
 	/* Send frame metadata */
-	ret = zmq_send(sock, frame->metadata, suo_metadata_count(frame) * sizeof(struct metadata), ZMQ_SNDMORE | ZMQ_DONTWAIT);
+	ret = zmq_send(sock, frame->metadata, frame->metadata_len * sizeof(struct metadata), ZMQ_SNDMORE | ZMQ_DONTWAIT);
 	if(ret < 0) {
 		print_fail_zmq("zmq_send_frame:meta", ret);
 		goto fail;

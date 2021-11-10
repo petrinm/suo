@@ -26,12 +26,12 @@ static void test_frame_operations(void)
 	for (unsigned i = 0; i < frame_a->data_len; i++)
 		frame_a->data[i] = rand() % 256;
 
-	SET_METADATA_I(frame_a, METADATA_SYNC_ERRORS, -1);
-	SET_METADATA_UI(frame_a, METADATA_GOLAY_CODED, 1337);
-	SET_METADATA_F(frame_a, METADATA_CFO, 12.345);
-	SET_METADATA_D(frame_a, METADATA_RSSI, -123.4);
-	CU_ASSERT(suo_metadata_count(frame_a) == 4);
-	printf("META COUNT %d\n", suo_metadata_count(frame_a));
+	SET_METADATA_INT(frame_a, METADATA_SYNC_ERRORS, -1);
+	SET_METADATA_UINT(frame_a, METADATA_GOLAY_CODED, 1337);
+	SET_METADATA_FLOAT(frame_a, METADATA_CFO, 12.345);
+	SET_METADATA_DOUBLE(frame_a, METADATA_RSSI, -123.4);
+	CU_ASSERT(frame_a->metadata_len == 4);
+	printf("META COUNT %d\n", frame_a->metadata_len);
 	suo_frame_print(frame_a, SUO_PRINT_DATA | SUO_PRINT_METADATA | SUO_PRINT_COLOR);
 
 

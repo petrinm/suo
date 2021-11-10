@@ -11,15 +11,13 @@
 
 
 
-
-#define METADATA_FREQEST    1
-
-/* Flags to indicate that a metadata field is used */
+/* Metadata identities */
 #define METADATA_ID               1
 #define METADATA_MODE             10
 #define METADATA_POWER            20
 #define METADATA_RSSI             21
 #define METADATA_CFO              30
+#define METADATA_FREQEST          31
 #define METADATA_SYNC_ERRORS      40
 #define METADATA_GOLAY_CODED      41
 #define METADATA_GOLAY_ERRORS     42
@@ -36,10 +34,11 @@
 #define METATYPE_TIME              5
 
 /* Metadata macros */
-#define SET_METADATA_F(frame, ident, val)   suo_metadata_set(frame, ident, METATYPE_FLOAT)->fl = val
-#define SET_METADATA_D(frame, ident, val)   suo_metadata_set(frame, ident, METATYPE_DOUBLE)->dl = val
-#define SET_METADATA_I(frame, ident, val)   suo_metadata_set(frame, ident, METATYPE_INT)->i = val
-#define SET_METADATA_UI(frame, ident, val)  suo_metadata_set(frame, ident, METATYPE_UINT)->i = val
+#define SET_METADATA_FLOAT(frame, ident, val)  suo_metadata_set(frame, ident, METATYPE_FLOAT)->v_float = (val)
+#define SET_METADATA_DOUBLE(frame, ident, val) suo_metadata_set(frame, ident, METATYPE_DOUBLE)->v_double = (val)
+#define SET_METADATA_INT(frame, ident, val)    suo_metadata_set(frame, ident, METATYPE_INT)->v_int = (val)
+#define SET_METADATA_UINT(frame, ident, val)   suo_metadata_set(frame, ident, METATYPE_UINT)->v_uint = (val)
+#define SET_METADATA_TIME(frame, ident, val)   suo_metadata_set(frame, ident, METATYPE_TIME)->v_time = (val)
 
 
 /* Metadata struct */
@@ -53,12 +52,12 @@ struct metadata {
 
 	// Union for the actual data
 	union {
-		int32_t i;
-		uint32_t ui;
-		float fl;
-		double dl;
-		timestamp_t time;
-		uint8_t raw[16];
+		int32_t     v_int;
+		uint32_t    v_uint;
+		float       v_float;
+		double      v_double;
+		timestamp_t v_time;
+		uint8_t     raw[16];
 	};
 };
 
@@ -79,8 +78,6 @@ int suo_metadata_dump(uint8_t* out);
 /*
  */
 int suo_metadata_load(uint8_t* out);
-
-unsigned int suo_metadata_count(const struct frame* frame);
 
 
 #endif /* __SUO_METADATA_H__ */

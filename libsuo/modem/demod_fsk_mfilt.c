@@ -247,8 +247,8 @@ static int demod_fsk_mfilt_sink_samples(void *arg, const sample_t *samples, size
 					if (self->receiver_lock == false) {
 						float cfo = (nco_crcf_get_frequency(self->l_nco) - self->freq_center) / self->nco_1Hz;
 						float rssi = 10.0f * log10f(self->est_power);
-						//SET_METADATA_F(self->frame, METADATA_POWER, cfo);
-						//SET_METADATA_F(self->frame, METADATA_RSSI, rssi);
+						//SET_METADATA_FLOAT(self->frame, METADATA_POWER, cfo);
+						//SET_METADATA_FLOAT(self->frame, METADATA_RSSI, rssi);
 					}
 					self->receiver_lock = true;
 				}
