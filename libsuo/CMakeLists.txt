@@ -17,6 +17,7 @@ include_directories(${LIQUIDDSP_INCLUDES})
 
 # Setup ZMQ
 find_package(ZeroMQ REQUIRED)
+include_directories(${ZMQ_INCLUDES})
 
 add_compile_options(-g -Wall -Wextra)
 
@@ -63,3 +64,8 @@ if (ALSA_FOUND)
     add_definitions(-DENABLE_ALSA)
     target_link_libraries(suo ${ALSA_LIBRARIES})
 endif()
+
+
+install( TARGETS suo LIBRARY DESTINATION lib )
+#install( FILES suo.h DESTINATION include )
+install( DIRECTORY . DESTINATION include/suo FILES_MATCHING PATTERN "*.h" )
