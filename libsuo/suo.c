@@ -17,19 +17,37 @@ int suo_error(int err_code, const char* err_msg) {
 struct frame* suo_frame_new(unsigned int data_len) {
 	struct frame* frame = (struct frame* )calloc(1, sizeof(struct frame));
 	frame->metadata = (struct metadata*)calloc(MAX_METADATA, sizeof(struct metadata));
-	frame->metadata_len = MAX_METADATA;
-	frame->data = (uint8_t*)calloc(1, data_len);
+	frame->metadata_len = 0;
+	if (data_len > 0)
+		frame->data = (uint8_t*)calloc(1, data_len);
 	frame->data_len = 0;
-	frame->data_alloc_len = data_len;
+	frame->data_alloc = data_len;
 	return frame;
 }
+
+
+struct frame* suo_frame_resize(struct frame* frame, unsigned int data_len) {
+	if (frame == NULL)
+		return suo_frame_new(data_len);
+	if (data_len < frame->data_alloc)
+		return frame;
+
+	frame->data = (uint8_t*)realloc(frame->data, data_len);
+	frame->data_len = 0;
+	frame->data_alloc = data_len;
+}
+
 
 void suo_frame_clear(struct frame* frame) {
 	if (frame == NULL)
 		return;
 
 	memset(&frame->hdr, 0, sizeof(struct frame_header));
+#if 1
+	memset(frame->metadata, 0, frame->data_alloc);
 	memset(frame->metadata, 0, MAX_METADATA * sizeof(struct metadata));
+#endif
+	frame->metadata_len = 0;
 	frame->data_len = 0;
 }
 
@@ -43,9 +61,9 @@ void suo_frame_copy(struct frame* dst, const struct frame* src) {
 	memcpy(&dst->hdr, &src->hdr, sizeof(struct frame_header));
 
 	/* Copy data */
-	if (dst->data == NULL || dst->data_alloc_len < src->data_len) {
+	if (dst->data == NULL || dst->data_alloc < src->data_len) {
 		dst->data = realloc(dst->data, src->data_len);
-		dst->data_alloc_len = src->data_len;
+		dst->data_alloc = src->data_len;
 	}
 	memcpy(dst->data, src->data, src->data_len);
 	dst->data_len = src->data_len;
@@ -53,7 +71,7 @@ void suo_frame_copy(struct frame* dst, const struct frame* src) {
 	/* Copy metadata */
 	if (dst->metadata == NULL /* || dst->metadata_len < src->metadata_len*/) {
 		dst->metadata = realloc(dst->metadata, MAX_METADATA * sizeof(struct metadata));
-		//dst->metadata_alloc_len = src->metadata_len;
+		//dst->metadata_alloc = src->metadata_len;
 	}
 	memcpy(dst->metadata, src->metadata, sizeof(struct metadata) * MAX_METADATA); // src->metadata_len);
 
@@ -72,7 +90,7 @@ void suo_frame_destroy(struct frame* frame) {
 		free(frame->data);
 		frame->data = NULL;
 		frame->data_len = 0;
-		frame->data_alloc_len = 0;
+		frame->data_alloc = 0;
 	}
 	free(frame);
 }

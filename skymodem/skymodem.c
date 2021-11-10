@@ -32,10 +32,12 @@ int main(int argc, char *argv[])
 	sdr_conf->rx_on = 1;
 	sdr_conf->tx_on = 1;
 	sdr_conf->use_time = 0;
-	sdr_conf->buffer = 2*1024;
+	sdr_conf->samplerate = 500000;
+
+	//sdr_conf->buffer = 1024;
+	sdr_conf->buffer = (sdr_conf->samplerate / 1000); // buffer lenght in milliseconds
 
 	sdr->set_conf(sdr_conf, "soapy-driver", "uhd");
-	sdr_conf->samplerate = 500000;
 
 	sdr_conf->rx_centerfreq = 437.00e6;
 	sdr_conf->tx_centerfreq = 437.00e6;
@@ -100,14 +102,16 @@ int main(int argc, char *argv[])
 	struct zmq_rx_output_conf* zmq_output_conf = (struct zmq_rx_output_conf*)zmq_output->init_conf();
 	zmq_output_conf->address = "tcp://*:43300";
 	zmq_output_conf->address_tick = "tcp://*:43302";
-	zmq_output_conf->flags = ZMQIO_BIND_TICK | ZMQIO_THREAD | ZMQIO_METADATA | ZMQIO_BIND;
+	zmq_output_conf->binding = 1;
+	zmq_output_conf->binding_ticks =  1;
+	zmq_output_conf->thread = 1;
 
 	void* zmq_output_inst = zmq_output->init(zmq_output_conf);
 	assert(zmq_output_inst);
 
 	deframer->set_frame_sink(deframer_9k6_inst, zmq_output->sink_frame, zmq_output_inst);
 	deframer->set_frame_sink(deframer_19k2_inst, zmq_output->sink_frame, zmq_output_inst);
-
+	sdr->set_tick_sink(sdr_inst, zmq_output->sink_tick, zmq_output_inst);
 
 	/*
 	 * Setup transmitter
@@ -144,7 +148,11 @@ int main(int argc, char *argv[])
 	struct zmq_tx_input_conf* zmq_input_conf = (struct zmq_tx_input_conf*)zmq_input->init_conf();
 	zmq_input_conf->address = "tcp://*:43301";
 	zmq_input_conf->address_tick = "tcp://*:43303";
-	zmq_input_conf->flags = ZMQIO_BIND_TICK | ZMQIO_THREAD | ZMQIO_METADATA | ZMQIO_BIND;
+	zmq_input_conf->binding = 1;
+	zmq_input_conf->binding_ticks =  1;
+	zmq_input_conf->thread = 1;
+
+
 	void *zmq_input_inst = zmq_input->init(zmq_input_conf);
 	assert(zmq_input_inst);
 

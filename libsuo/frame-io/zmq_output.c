@@ -24,7 +24,7 @@ static void print_fail_zmq(const char *function, int ret)
 
 struct zmq_output {
 	/* Configuration */
-	uint32_t flags;
+	struct zmq_rx_output_conf c;
 
 	/* Decoder thread */
 	volatile bool decoder_running;
@@ -48,32 +48,33 @@ static void *zmq_output_init(const void *confv)
 {
 	const struct zmq_rx_output_conf *conf = (const struct zmq_rx_output_conf *)confv;
 	struct zmq_output *self = (struct zmq_output*)calloc(1, sizeof(*self));
-	if(self == NULL) return NULL;
-	self->flags = conf->flags;
+	self->c = *(struct zmq_rx_output_conf*)confv;
 
 	if(zmq == NULL)
 		zmq = zmq_ctx_new();
 
 	// Connect the frame socket
 	self->z_rx_pub = zmq_socket(zmq, ZMQ_PUB);
-	if (self->flags & ZMQIO_BIND) {
-		printf("Output binded to: %s\n", conf->address);
-		ZMQCHECK(zmq_bind(self->z_rx_pub, conf->address));
+	if (self->c.binding) {
+		printf("Output binded to: %s\n", self->c.address);
+		ZMQCHECK(zmq_bind(self->z_rx_pub, self->c.address));
 	}
 	else {
-		printf("Output connected to: %s\n", conf->address);
-		ZMQCHECK(zmq_connect(self->z_rx_pub, conf->address));
+		printf("Output connected to: %s\n", self->c.address);
+		ZMQCHECK(zmq_connect(self->z_rx_pub, self->c.address));
 	}
 
 	// Connect the tick socket
-	self->z_tick_pub = zmq_socket(zmq, ZMQ_PUB);
-	if (self->flags & ZMQIO_BIND_TICK) {
-		printf("Output ticks binded to: %s\n", conf->address_tick);
-		ZMQCHECK(zmq_bind(self->z_tick_pub, conf->address_tick));
-	}
-	else {
-		printf("Output ticks connected to: %s\n", conf->address_tick);
-		ZMQCHECK(zmq_connect(self->z_tick_pub, conf->address_tick));
+	if (self->c.address_tick != NULL && strlen(self->c.address_tick) > 0) {
+		self->z_tick_pub = zmq_socket(zmq, ZMQ_PUB);
+		if (self->c.binding_ticks) {
+			printf("Output ticks binded to: %s\n", self->c.address_tick);
+			ZMQCHECK(zmq_bind(self->z_tick_pub, self->c.address_tick));
+		}
+		else {
+			printf("Output ticks connected to: %s\n", self->c.address_tick);
+			ZMQCHECK(zmq_connect(self->z_tick_pub, self->c.address_tick));
+		}
 	}
 
 	return self;
@@ -125,6 +126,17 @@ static int zmq_output_destroy(void *arg)
 		pthread_kill(self->decoder_thread, SIGTERM);
 		pthread_join(self->decoder_thread, NULL);
 	}
+
+	if (self->z_rx_pub != NULL) {
+		zmq_close(self->z_rx_pub);
+		self->z_rx_pub = NULL;
+	}
+
+	if (self->z_tick_pub != NULL) {
+		zmq_close(self->z_tick_pub);
+		self->z_tick_pub = NULL;
+	}
+
 	return 0;
 }
 
@@ -152,7 +164,7 @@ static void *zmq_decoder_main(void *arg)
 			printf("Decoded:\n");
 			suo_frame_print(decoded, SUO_PRINT_DATA | SUO_PRINT_METADATA | SUO_PRINT_COLOR);
 
-			if (zmq_send_frame(self->z_rx_pub, decoded) < 0)
+			if (suo_zmq_send_frame(self->z_rx_pub, decoded) < 0)
 				goto fail;
 
 		} else {
@@ -180,25 +192,26 @@ static int zmq_output_sink_frame(void *arg, const struct frame *frame, timestamp
 	if (s == NULL)
 		s = self->z_rx_pub; // return -1;
 
-	return zmq_send_frame(s, frame);
+	return suo_zmq_send_frame(s, frame);
 }
 
 
 /* Send a timing */
-static int zmq_output_tick(void *arg, timestamp_t timenow)
+static int zmq_output_tick(void *arg, unsigned int flags, timestamp_t timenow)
 {
 	struct zmq_output *self = (struct zmq_output*)arg;
 	void *s = self->z_tick_pub;
 	if (s == NULL)
 		return -1;
 
-	struct timing msg = {
+	struct frame_header msg = {
 		.id = SUO_ID_TIMING_MSG,
-		.flags = 0,
-		.time = timenow
+		.flags = flags,
+		.timestamp = timenow,
 	};
 	ZMQCHECK(zmq_send(s, &msg, sizeof(msg), ZMQ_DONTWAIT));
-	return 0;
+
+	return SUO_OK;
 fail: /* For ZMQCHECK macro */
 	return -2;
 }
@@ -206,14 +219,18 @@ fail: /* For ZMQCHECK macro */
 
 const struct zmq_rx_output_conf zmq_rx_output_defaults = {
 	.address = "tcp://*:43300",
+	.binding = 1,
 	.address_tick = "tcp://*:43302",
-	.flags = ZMQIO_BIND | ZMQIO_METADATA | ZMQIO_THREAD | ZMQIO_BIND_TICK
+	.binding_ticks = 0,
+	.thread = 1,
 };
 
 CONFIG_BEGIN(zmq_rx_output)
 CONFIG_C(address)
 CONFIG_C(address_tick)
-CONFIG_I(flags)
+CONFIG_I(binding)
+CONFIG_I(binding_ticks)
+CONFIG_I(thread)
 CONFIG_END()
 
 const struct rx_output_code zmq_rx_output_code = {

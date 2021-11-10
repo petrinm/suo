@@ -23,6 +23,7 @@ struct soapysdr_io {
 	struct soapysdr_io_conf conf;
 	CALLBACK(sample_sink_t, sample_sink);
 	CALLBACK(sample_source_t, sample_source);
+	CALLBACK(tick_sink_t, tick_sink);
 };
 
 
@@ -243,6 +244,7 @@ static int soapysdr_io_execute(void *arg)
 
 			} else if(ret <= 0) {
 				soapy_fail("SoapySDRDevice_readStream", ret);
+				goto exit_soapy;
 			}
 		} else {
 			/* TX-only case */
@@ -387,6 +389,14 @@ static int soapysdr_io_execute(void *arg)
 			}
 		}
 #endif
+		/* Send ticks */
+		if (self->tick_sink != NULL) {
+			unsigned int flags = 0;
+			if (tx_burst_going == 1)
+				flags |= SUO_FLAGS_TX_ACTIVE;
+			self->tick_sink(self->tick_sink_arg, flags, current_time);
+		}
+
 	}
 
 	fprintf(stderr, "Stopped receiving\n");
@@ -439,7 +449,7 @@ static int soapysdr_io_set_sample_sink(void *arg, sample_sink_t callback, void *
 		return suo_error(-3, "NULL sample sink");
 	self->sample_sink = callback;
 	self->sample_sink_arg = callback_arg;
-	return 0;
+	return SUO_OK;
 }
 
 
@@ -450,7 +460,17 @@ static int soapysdr_io_set_sample_source(void *arg, sample_source_t callback, vo
 		return suo_error(-3, "NULL sample source");
 	self->sample_source = callback;
 	self->sample_source_arg = callback_arg;
-	return 0;
+	return SUO_OK;
+}
+
+
+static int soapysdr_io_set_tick_sink(void* arg, tick_sink_t callback, void* callback_arg) {
+	struct soapysdr_io *self = arg;
+	if (callback == NULL || callback_arg == NULL)
+		return suo_error(-3, "NULL sample source");
+	self->tick_sink = callback;
+	self->tick_sink_arg = callback_arg;
+	return SUO_OK;
 }
 
 
@@ -516,5 +536,6 @@ const struct signal_io_code soapysdr_io_code = {
 	.set_conf=set_conf,
 	.set_sample_sink=soapysdr_io_set_sample_sink,
 	.set_sample_source=soapysdr_io_set_sample_source,
+	.set_tick_sink=soapysdr_io_set_tick_sink,
 	.execute=soapysdr_io_execute
 };

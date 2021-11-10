@@ -66,7 +66,7 @@ struct any_code {
 /* Flag to prevent transmission of a frame if it's too late,
  * i.e. if the timestamp is already in the past */
 #define SUO_FLAGS_NO_LATE 0x40000
-
+#define SUO_FLAGS_TX_ACTIVE 0x20000
 
 #include "suo_interface.h"
 #include "metadata.h"
@@ -80,16 +80,26 @@ struct frame_header {
 // Frame together with metadata
 struct frame {
 	struct frame_header hdr;    // Frame header field
-	struct metadata* metadata;  // Metadata
-	unsigned int metadata_len;  //
-	uint8_t* data; // Data (can be bytes, bits, symbols or soft bits)
+
+	/* Metadata array (MAX_METADATA-items long) */
+	struct metadata* metadata;
+
+	/* Number of */
+	unsigned int metadata_len;
+
+	/* Actual data (can be bytes, bits or softbits  )*/
+	uint8_t* data;
+
+	/* Number of bytes in */
 	unsigned int data_len;
-	unsigned int data_alloc_len;
+
+	/* Length of data allocation */
+	unsigned int data_alloc;
 };
 
 
-typedef int(*tick_source_t)(void*, timestamp_t timestamp);
-typedef int(*tick_sink_t)(void*, timestamp_t timestamp);
+typedef int(*tick_source_t)(void*, unsigned int flags, timestamp_t timestamp);
+typedef int(*tick_sink_t)(void*, unsigned int flags, timestamp_t timestamp);
 
 typedef int(*frame_source_t)(void*, struct frame *frame, timestamp_t timestamp);
 typedef int(*frame_sink_t)(void*, const struct frame *frame, timestamp_t timestamp);
@@ -194,7 +204,6 @@ struct encoder_code {
 
 	int   (*encode)  (void *, const struct frame *in, struct frame *out, size_t maxlen);
 
-	//RET_CALLBACK(sample)  (*get_sample_source)(void *, unsigned int ident);
 
 };
 
@@ -221,7 +230,7 @@ struct tx_input_code {
 	int   (*source_frame) (void *, struct frame *frame, timestamp_t t);
 
 	// Called regularly with the time where transmit signal generation is going
-	int   (*tick)      (void *, timestamp_t timenow);
+	tick_sink_t sink_tick;
 };
 
 
@@ -285,6 +294,7 @@ struct signal_io_code {
 	// Set callbacks to a receiver and a transmitter
 	int   (*set_sample_sink)(void *, sample_sink_t callback, void *arg);
 	int   (*set_sample_source)(void *, sample_source_t callback, void *arg);
+	int   (*set_tick_sink)(void*, tick_sink_t callback, void* arg);
 
 	// The I/O "main loop"
 	int   (*execute)    (void *);
