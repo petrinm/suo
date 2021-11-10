@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
 
 	sdr_conf->rx_on = 1;
 	sdr_conf->tx_on = 1;
-	sdr_conf->use_time = 0;
+	sdr_conf->use_time = 1;
 	sdr_conf->samplerate = 500000;
 
 	//sdr_conf->buffer = 1024;
@@ -80,7 +80,6 @@ int main(int argc, char *argv[])
 	assert(receiver_9k6_inst);
 	void* deframer_9k6_inst = deframer->init(deframer_conf);
 	assert(deframer_9k6_inst);
- 	sdr->set_sample_sink(sdr_inst, receiver->sink_samples, receiver_9k6_inst);
 	receiver->set_symbol_sink(receiver_9k6_inst, deframer->sink_symbol, deframer_9k6_inst);
 
 	/* For 19200 baud */
@@ -89,11 +88,20 @@ int main(int argc, char *argv[])
 	assert(receiver_19k2_inst);
 	void* deframer_19k2_inst = deframer->init(deframer_conf);
 	assert(deframer_19k2_inst);
-
-	//sdr->set_sample_sink(sdr_inst, receiver, receiver_19k2_inst);
 	receiver->set_symbol_sink(receiver_19k2_inst, deframer->sink_symbol, deframer_19k2_inst);
 
-
+#if 1
+	sdr->set_sample_sink(sdr_inst, receiver->sink_samples, receiver_9k6_inst);
+#else
+	/*
+	 * Create sample mux
+	 */
+	const struct decoder_code *sample_mux = &sample_sink_mux_code;
+	void* sample_mux_inst = sample_mux->init(NULL); /* No configurations */
+	sample_mux->set_sample_sink(sample_mux_inst, receiver->sink_samples, receiver_9k6_inst);
+	sample_mux->set_sample_sink(sample_mux_inst, receiver->sink_samples, receiver_19k2_inst);
+	sdr->set_sample_sink(sdr_inst, sample_mux->sink_samples, sample_mux_inst);
+#endif
 
 	/*
 	 * ZMQ output
