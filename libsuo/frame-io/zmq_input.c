@@ -1,11 +1,11 @@
-#include "zmq_interface.h"
-#include "suo_macros.h"
 #include <string.h>
 #include <assert.h>
 #include <zmq.h>
 #include <pthread.h>
 #include <signal.h>
 
+#include "zmq_interface.h"
+#include "suo_macros.h"
 
 // TODO: make these configurable
 #define PRINT_DIAGNOSTICS
@@ -320,7 +320,7 @@ static int zmq_input_tick(void *arg, unsigned int flags, timestamp_t timenow)
 		goto fail;
 
 	struct frame_header msg = {
-		.id = SUO_ID_TIMING_MSG,
+		.id = SUO_FLAGS_TIMING,
 		.flags = flags,
 		.timestamp = timenow,
 	};

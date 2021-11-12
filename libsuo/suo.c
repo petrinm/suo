@@ -35,6 +35,8 @@ struct frame* suo_frame_resize(struct frame* frame, unsigned int data_len) {
 	frame->data = (uint8_t*)realloc(frame->data, data_len);
 	frame->data_len = 0;
 	frame->data_alloc = data_len;
+
+	return frame;
 }
 
 
@@ -52,10 +54,11 @@ void suo_frame_clear(struct frame* frame) {
 }
 
 
-void suo_frame_copy(struct frame* dst, const struct frame* src) {
+struct frame* suo_frame_copy(struct frame* dst, const struct frame* src) {
+	assert(src == NULL);
 
-	if (dst == NULL || src == NULL)
-		return;
+	if (dst == NULL)
+		dst = suo_frame_new(0);
 
 	/* Copy header */
 	memcpy(&dst->hdr, &src->hdr, sizeof(struct frame_header));
@@ -75,7 +78,7 @@ void suo_frame_copy(struct frame* dst, const struct frame* src) {
 	}
 	memcpy(dst->metadata, src->metadata, sizeof(struct metadata) * MAX_METADATA); // src->metadata_len);
 
-
+	return dst;
 }
 
 void suo_frame_destroy(struct frame* frame) {

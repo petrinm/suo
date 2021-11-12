@@ -65,10 +65,12 @@ struct any_code {
 
 /* Flag to prevent transmission of a frame if it's too late,
  * i.e. if the timestamp is already in the past */
-#define SUO_FLAGS_NO_LATE 0x40000
-#define SUO_FLAGS_TX_ACTIVE 0x20000
+#define SUO_FLAGS_NO_LATE     0x40000
+#define SUO_FLAGS_TX_ACTIVE   0x20000
+#define SUO_FLAGS_TIMING    0x8000000
 
-#include "suo_interface.h"
+
+
 #include "metadata.h"
 
 struct frame_header {
@@ -323,8 +325,15 @@ struct frame* suo_frame_new(unsigned int data_len);
 
 void suo_frame_clear(struct frame* frame);
 
-/**/
-void suo_frame_copy(struct frame* dst, const struct frame* src);
+/*
+ *
+ */
+struct frame* suo_frame_copy(struct frame* dst, const struct frame* src);
+
+/*
+ * Resize the frame
+ */
+struct frame* suo_frame_resize(struct frame* frame, unsigned int data_len);
 
 /* Destroy */
 void suo_frame_destroy(struct frame* frame);
