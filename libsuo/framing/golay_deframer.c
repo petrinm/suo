@@ -114,6 +114,7 @@ static int golay_deframer_sink_symbol(void *arg, symbol_t bit, timestamp_t time)
 			self->latest_bits = 0;
 
 			//
+			suo_frame_clear(self->frame);
 			self->frame->hdr.timestamp = time;
 			SET_METADATA_UINT(self->frame, METADATA_SYNC_ERRORS, sync_errors);
 
