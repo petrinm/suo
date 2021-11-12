@@ -55,7 +55,7 @@ int suo_zmq_send_frame(void* sock, const struct frame *frame);
  *   1 on success and new frame was received on stored to frame objects
  *   <0 on error
  */
-int sup_zmq_recv_frame(void* sock, struct frame *frame);
+int suo_zmq_recv_frame(void* sock, struct frame *frame);
 
 
 /* Suo module definitions */

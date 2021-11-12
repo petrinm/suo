@@ -48,7 +48,7 @@ struct metadata {
 		uint8_t len;
 		uint8_t type;
 		uint16_t ident;
-	};
+	} __attribute__((packed));
 
 	// Union for the actual data
 	union {
@@ -56,10 +56,10 @@ struct metadata {
 		uint32_t    v_uint;
 		float       v_float;
 		double      v_double;
-		timestamp_t v_time;
+		suo_timestamp_t v_time;
 		uint8_t     raw[16];
 	};
-};
+} __attribute__((packed));
 
 struct frame;
 

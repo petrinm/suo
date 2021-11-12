@@ -42,7 +42,7 @@ static int hdlc_framer_set_frame_source(void *arg, frame_source_t callback, void
 }
 
 
-static int hdlc_framer_source_symbols(void *arg, symbol_t* symbols, size_t max_symbols, timestamp_t t) {
+static int hdlc_framer_source_symbols(void *arg, symbol_t* symbols, size_t max_symbols, suo_timestamp_t t) {
 
 
 	unsigned int stuffing = 0;

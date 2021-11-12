@@ -13,14 +13,14 @@
 
 static struct frame* received_frame = NULL;
 
-static int dummy_frame_sink(void *arg, const struct frame *frame, timestamp_t t) {
+static int dummy_frame_sink(void *arg, const struct frame *frame, suo_timestamp_t t) {
 	(void)arg; (void)t;
 	received_frame = suo_frame_new(frame->data_len);
 	suo_frame_copy(received_frame, frame);
 	return SUO_OK;
 }
 
-static int dummy_frame_source(void *arg, struct frame *frame, timestamp_t t) {
+static int dummy_frame_source(void *arg, struct frame *frame, suo_timestamp_t t) {
 	(void)t;
 	suo_frame_copy(frame, arg);
 	return 1;
@@ -37,7 +37,7 @@ static void test_golay_simple(void)
 	symbol_t* symbols = calloc(1, 1024);
 
 	{
-		timestamp_t t = 0;
+		suo_timestamp_t t = 0;
 		const struct encoder_code* framer = &golay_framer_code;
 		CU_ASSERT(framer->name != NULL);
 
@@ -119,7 +119,7 @@ static void test_golay_simple(void)
 		deframer->set_frame_sink(inst, dummy_frame_sink, (void*)0xdeadbeef);
 
 
-		timestamp_t t = 10000;
+		suo_timestamp_t t = 10000;
 		int ret;
 
 		received_frame = NULL;

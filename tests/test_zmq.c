@@ -15,7 +15,7 @@
 
 void test_zmq_simple(void) {
 
-	timestamp_t time = 0;
+	suo_timestamp_t time = 0;
 
 	/*
 	 * Create ZMQ TX input

@@ -461,7 +461,7 @@ static int execute_sample(struct demod_gmsk *self, float complex _x)
 }
 
 
-static int demod_gmsk_sink_samples(void *arg, const sample_t *samples, size_t nsamp, timestamp_t timestamp)
+static int demod_gmsk_sink_samples(void *arg, const sample_t *samples, size_t nsamp, suo_timestamp_t timestamp)
 {
 	struct demod_gmsk *self = arg;
 	//self->output.tick(self->output_arg, timestamp);
@@ -469,7 +469,7 @@ static int demod_gmsk_sink_samples(void *arg, const sample_t *samples, size_t ns
 	/* Allocate small buffers from stack */
 	sample_t samples2[self->resampint];
 
-	timestamp_t sample_ns = roundf(1.0e9f / self->c.sample_rate);
+	suo_timestamp_t sample_ns = roundf(1.0e9f / self->c.sample_rate);
 
 	size_t si;
 	for(si = 0; si < nsamp; si++) {

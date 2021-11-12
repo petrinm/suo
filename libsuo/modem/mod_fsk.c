@@ -75,7 +75,7 @@ static int mod_fsk_set_symbol_source(void *arg, symbol_source_t callback, void *
 	return 0;
 }
 
-static int mod_fsk_source_samples(void *arg, sample_t *samples, size_t maxsamples, timestamp_t timestamp)
+static int mod_fsk_source_samples(void *arg, sample_t *samples, size_t maxsamples, suo_timestamp_t timestamp)
 {
 	struct mod_fsk *self = (struct mod_fsk *)arg;
 	//if (self->tick != NULL)
@@ -95,7 +95,7 @@ static int mod_fsk_source_samples(void *arg, sample_t *samples, size_t maxsample
 		/*
 		 * Idle (check for now incoming frames)
 		 */
-		const timestamp_t time_end = timestamp + (timestamp_t)(self->sample_ns * maxsamples);
+		const suo_timestamp_t time_end = timestamp + (suo_timestamp_t)(self->sample_ns * maxsamples);
 		int ret = -1; // self->symbol_source(self->symbol_source_arg, &self->frame, time_end);
 		if (ret > 0) {
 			assert(ret <= FRAMELEN_MAX);

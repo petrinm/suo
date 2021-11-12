@@ -93,7 +93,7 @@ static int golay_deframer_reset(void *arg)  {
 
 
 
-static int golay_deframer_sink_symbol(void *arg, symbol_t bit, timestamp_t time)
+static int golay_deframer_sink_symbol(void *arg, symbol_t bit, suo_timestamp_t time)
 {
 	struct golay_deframer *self = (struct golay_deframer *)arg;
 

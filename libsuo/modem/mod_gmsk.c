@@ -18,9 +18,9 @@ static const float pi2f = 6.283185307179586f;
 struct mod_gmsk {
 	/* Configuration */
 	struct mod_gmsk_conf c;
-	uint32_t        symrate; // integer symbol rate
-	timestamp_t     sample_ns; // Sample duration in ns
-	unsigned int    mod_rate; // GMSK modulator samples per symbols rate
+	uint32_t        symrate;         // integer symbol rate
+	suo_timestamp_t sample_ns;       // Sample duration in ns
+	unsigned int    mod_rate;        // GMSK modulator samples per symbols rate
 	unsigned int    mod_max_samples; // Maximum number of samples generated from single symbol
 	float           nco_1Hz;
 
@@ -148,7 +148,7 @@ static int mod_gmsk_set_symbol_source(void *arg, symbol_source_t callback, void 
 }
 
 
-static int mod_gmsk_source_samples(void *arg, sample_t *samples, size_t max_samples, timestamp_t timestamp)
+static int mod_gmsk_source_samples(void *arg, sample_t *samples, size_t max_samples, suo_timestamp_t timestamp)
 {
 	struct mod_gmsk *self = (struct mod_gmsk *)arg;
 
@@ -164,7 +164,7 @@ static int mod_gmsk_source_samples(void *arg, sample_t *samples, size_t max_samp
 		/*
 		 * Idle (check for now incoming frames)
 		 */
-		const timestamp_t time_end = timestamp + (timestamp_t)(self->sample_ns * max_samples);
+		const suo_timestamp_t time_end = timestamp + (suo_timestamp_t)(self->sample_ns * max_samples);
 		int ret = self->symbol_source(self->symbol_source_arg, self->symbols, MAX_SYMBOLS, time_end);
 		//int ret = self->symbol_source.get(self->);
 

@@ -122,7 +122,7 @@ static int golay_framer_set_frame_source(void *arg, frame_source_t callback, voi
 }
 
 
-static int golay_framer_source_symbols(void *arg, symbol_t* symbols, size_t max_symbols, timestamp_t t) {
+static int golay_framer_source_symbols(void *arg, symbol_t* symbols, size_t max_symbols, suo_timestamp_t t) {
 	struct golay_framer *self = (struct golay_framer*)arg;
 	if (self->frame_source == NULL || self->frame_source_arg == NULL)
 		return suo_error(SUO_ERROR, "No frame source defined!");

@@ -31,7 +31,7 @@ typedef uint8_t byte_t;
 typedef uint8_t softbit_t;
 
 // Data type to represent timestamps. Unit is nanoseconds.
-typedef uint64_t timestamp_t;
+typedef uint64_t suo_timestamp_t;
 
 /* All categories have these functions at the beginning of the struct,
  * so configuration and initialization code can be shared among
@@ -76,7 +76,7 @@ struct any_code {
 struct frame_header {
 	uint32_t id;
 	uint32_t flags;
-	timestamp_t timestamp; // Current time
+	suo_timestamp_t timestamp; // Current time
 };
 
 // Frame together with metadata
@@ -100,24 +100,24 @@ struct frame {
 };
 
 
-typedef int(*tick_source_t)(void*, unsigned int flags, timestamp_t timestamp);
-typedef int(*tick_sink_t)(void*, unsigned int flags, timestamp_t timestamp);
+typedef int(*tick_source_t)(void*, unsigned int flags, suo_timestamp_t timestamp);
+typedef int(*tick_sink_t)(void*, unsigned int flags, suo_timestamp_t timestamp);
 
-typedef int(*frame_source_t)(void*, struct frame *frame, timestamp_t timestamp);
-typedef int(*frame_sink_t)(void*, const struct frame *frame, timestamp_t timestamp);
-
-
-typedef int(*symbol_source_t)(void*, symbol_t *symbols, size_t max_symbols, timestamp_t timestamp);
-//typedef int(*symbol_sink_t)(void*, symbol_t *symbols, size_t max_symbols, timestamp_t timestamp);
-typedef int(*symbol_sink_t)(void*, symbol_t symbols, timestamp_t timestamp);
+typedef int(*frame_source_t)(void*, struct frame *frame, suo_timestamp_t timestamp);
+typedef int(*frame_sink_t)(void*, const struct frame *frame, suo_timestamp_t timestamp);
 
 
-typedef int(*soft_symbol_source_t)(void*, soft_symbol_t *symbols, size_t max_symbols, timestamp_t timestamp);
-//typedef int(*soft_symbol_sink_t)(void*, soft_symbol_t *symbols, size_t max_symbols, timestamp_t timestamp);
-typedef int(*soft_symbol_sink_t)(void*, soft_symbol_t symbol, timestamp_t timestamp);
+typedef int(*symbol_source_t)(void*, symbol_t *symbols, size_t max_symbols, suo_timestamp_t timestamp);
+//typedef int(*symbol_sink_t)(void*, symbol_t *symbols, size_t max_symbols, suo_timestamp_t timestamp);
+typedef int(*symbol_sink_t)(void*, symbol_t symbols, suo_timestamp_t timestamp);
 
-typedef int(*sample_source_t)(void*, sample_t *samples, size_t max_samples, timestamp_t timestamp);
-typedef int(*sample_sink_t)(void*, const sample_t *samples, size_t num_samples, timestamp_t timestamp);
+
+typedef int(*soft_symbol_source_t)(void*, soft_symbol_t *symbols, size_t max_symbols, suo_timestamp_t timestamp);
+//typedef int(*soft_symbol_sink_t)(void*, soft_symbol_t *symbols, size_t max_symbols, suo_timestamp_t timestamp);
+typedef int(*soft_symbol_sink_t)(void*, soft_symbol_t symbol, suo_timestamp_t timestamp);
+
+typedef int(*sample_source_t)(void*, sample_t *samples, size_t max_samples, suo_timestamp_t timestamp);
+typedef int(*sample_sink_t)(void*, const sample_t *samples, size_t num_samples, suo_timestamp_t timestamp);
 
 
 /* -----------------------------------------
@@ -196,7 +196,7 @@ struct encoder_code {
 	void *(*init_conf) (void);
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
-	int   (*tick)      (void *, timestamp_t timenow);
+	int   (*tick)      (void *, suo_timestamp_t timenow);
 
 
 	//int   (*set_symbol_sink) (void *, const struct decoder_code *, void *rx_output_arg);
@@ -229,7 +229,7 @@ struct tx_input_code {
 	 * before time_dl, it should be returned in this call, since in the
 	 * next call it may be too late. Returning a frame to transmit after
 	 * time_dl is also accepted though. */
-	int   (*source_frame) (void *, struct frame *frame, timestamp_t t);
+	int   (*source_frame) (void *, struct frame *frame, suo_timestamp_t t);
 
 	// Called regularly with the time where transmit signal generation is going
 	tick_sink_t sink_tick;

@@ -76,7 +76,7 @@ static int file_io_execute(void *arg)
 {
 	struct file_io *self = arg;
 	enum inputformat inputformat = self->conf.format;
-	timestamp_t timestamp = 0, tx_latency_time = 0;
+	suo_timestamp_t timestamp = 0, tx_latency_time = 0;
 	sample_t buf2[BUFLEN];
 
 	if (self->in == NULL)

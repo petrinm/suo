@@ -70,7 +70,7 @@ err:
 /* Convert a number of samples to a timestamp while avoiding
  * accumulation of rounding errors.
  * Sample rate needs to be an integer (in Hz). */
-static timestamp_t samples_to_ns(uint64_t n, uint32_t fs) {
+static suo_timestamp_t samples_to_ns(uint64_t n, uint32_t fs) {
 	return n / fs * 1000000000ULL +
 	(uint64_t)((float)(n % fs) * (1000000000.0f / fs));
 }

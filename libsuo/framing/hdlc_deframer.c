@@ -61,7 +61,7 @@ static int hdlc_deframer_set_frame_source(void *arg, frame_source_t callback, vo
 }
 
 
-static int hdlc_deframer_sink_symbol(void* arg, bit_t bit, timestamp_t now) {
+static int hdlc_deframer_sink_symbol(void* arg, bit_t bit, suo_timestamp_t now) {
 	struct hdlc_deframer* self = (struct hdlc_deframer*)arg;
 	(void)bit; (void)now;
 	return SUO_OK;
@@ -97,6 +97,7 @@ static int hdlc_deframer_sink_symbol(void* arg, bit_t bit, timestamp_t now) {
 		 */
 
 		if (shift == 0x7E) {
+			suo_frame_clear(self->frame);
 			return 1;
 	 	}
 

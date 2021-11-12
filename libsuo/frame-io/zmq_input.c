@@ -269,7 +269,7 @@ static void *zmq_encoder_main(void *arg)
 
 
 
-static int zmq_input_source_frame(void* arg, struct frame *frame, timestamp_t timenow)
+static int zmq_input_source_frame(void* arg, struct frame *frame, suo_timestamp_t timenow)
 {
 	struct zmq_input *self = (struct zmq_input *)arg;
 	(void)timenow; // Not used since protocol stack doesn't run here
@@ -312,7 +312,7 @@ static int zmq_input_destroy(void *arg)
 }
 
 
-static int zmq_input_tick(void *arg, unsigned int flags, timestamp_t timenow)
+static int zmq_input_tick(void *arg, unsigned int flags, suo_timestamp_t timenow)
 {
 	struct zmq_input *self = (struct zmq_input *)arg;
 	void *s = self->z_tick_pub;

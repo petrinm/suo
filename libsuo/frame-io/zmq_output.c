@@ -181,7 +181,7 @@ fail:
 
 
 
-static int zmq_output_sink_frame(void *arg, const struct frame *frame, timestamp_t timestamp)
+static int zmq_output_sink_frame(void *arg, const struct frame *frame, suo_timestamp_t timestamp)
 {
 	struct zmq_output *self = (struct zmq_output*)arg;
 
@@ -198,7 +198,7 @@ static int zmq_output_sink_frame(void *arg, const struct frame *frame, timestamp
 
 
 /* Send a timing */
-static int zmq_output_tick(void *arg, unsigned int flags, timestamp_t timenow)
+static int zmq_output_tick(void *arg, unsigned int flags, suo_timestamp_t timenow)
 {
 	struct zmq_output *self = (struct zmq_output*)arg;
 	void *s = self->z_tick_pub;

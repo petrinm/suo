@@ -18,7 +18,7 @@ struct demod_fsk_mfilt {
 	struct fsk_demod_mfilt_conf c;
 
 	//float resamprate;
-	timestamp_t    sample_ns;
+	suo_timestamp_t    sample_ns;
 	unsigned       resampint;
 	float          nco_1Hz;
 	float          afc_speed;
@@ -131,7 +131,7 @@ static int demod_fsk_mfilt_destroy(void *arg)
 }
 
 
-static int demod_fsk_mfilt_sink_samples(void *arg, const sample_t *samples, size_t nsamp, timestamp_t timestamp)
+static int demod_fsk_mfilt_sink_samples(void *arg, const sample_t *samples, size_t nsamp, suo_timestamp_t timestamp)
 {
 	struct demod_fsk_mfilt *self = arg;
 	//self->output.tick(self->output_arg, timestamp);

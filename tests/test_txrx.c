@@ -19,7 +19,7 @@
 static struct frame* transmit_frame = NULL;
 static struct frame* received_frame = NULL;
 
-static int dummy_frame_sink(void *arg, const struct frame *frame, timestamp_t t) {
+static int dummy_frame_sink(void *arg, const struct frame *frame, suo_timestamp_t t) {
 	(void)arg; (void)t;
 	received_frame = suo_frame_new(frame->data_len);
 	suo_frame_copy(received_frame, frame);
@@ -28,7 +28,7 @@ static int dummy_frame_sink(void *arg, const struct frame *frame, timestamp_t t)
 }
 
 
-static int source_dummy_frame(void * arg, struct frame *frame, timestamp_t time) {
+static int source_dummy_frame(void * arg, struct frame *frame, suo_timestamp_t time) {
 	(void)arg;
 
 #if 0
@@ -163,7 +163,7 @@ static void test_txrx(void)
 
 
 		int ret;
-		timestamp_t time = 10000;
+		suo_timestamp_t time = 10000;
 
 		float SNRdB = 3; // -5 to 10
 		float nstd = powf(10.0f, -SNRdB/20.0f); // noise standard deviation

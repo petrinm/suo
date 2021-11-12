@@ -266,7 +266,7 @@ static int soapysdr_io_execute(void *arg)
 			sample_t txbuf[tx_buflen];
 			int flags = 0, ret;
 
-			timestamp_t tx_from_time, tx_until_time;
+			suo_timestamp_t tx_from_time, tx_until_time;
 			tx_from_time = tx_last_end_time;
 			tx_until_time = current_time + tx_latency_time;
 			int nsamp = round((double)(tx_until_time - tx_from_time) / sample_ns);
@@ -277,7 +277,7 @@ static int soapysdr_io_execute(void *arg)
 				if ((unsigned)nsamp > tx_buflen)
 					nsamp = tx_buflen;
 				tx_len = self->sample_source(self->sample_source_arg, txbuf, nsamp, tx_from_time);
-				tx_last_end_time = tx_from_time + (timestamp_t)(sample_ns * tx_len);
+				tx_last_end_time = tx_from_time + (suo_timestamp_t)(sample_ns * tx_len);
 			}
 
 			//if (conf->use_time)
@@ -312,7 +312,7 @@ static int soapysdr_io_execute(void *arg)
 				const void *txbuffs[] = { txbuf };
 				ret = SoapySDRDevice_writeStream(sdr, txstream,
 					txbuffs, tx_len, &flags,
-					tx_from_time + (timestamp_t)(sample_ns * 0),
+					tx_from_time + (suo_timestamp_t)(sample_ns * 0),
 					timeout_us);
 				if(ret <= 0)
 					soapy_fail("SoapySDRDevice_writeStream", ret);

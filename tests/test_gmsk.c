@@ -13,7 +13,7 @@
 static const struct frame* received_frame = NULL;
 
 
-static int source_dummy_symbols(void *arg, symbol_t *symbols, size_t max_symbols, timestamp_t timestamp)
+static int source_dummy_symbols(void *arg, symbol_t *symbols, size_t max_symbols, suo_timestamp_t timestamp)
 {
 	static int f = 0;
 	if (f == 1)
@@ -38,7 +38,7 @@ static int source_dummy_symbols(void *arg, symbol_t *symbols, size_t max_symbols
 }
 
 
-static int source_dummy_frame(void * v, struct frame *frame, timestamp_t t) {
+static int source_dummy_frame(void * v, struct frame *frame, suo_timestamp_t t) {
 	(void)v; (void)t;
 
 	frame->hdr.id = 2;
@@ -92,7 +92,7 @@ static void test_gmsk(void)
 	sample_t samples[MAX_SAMPLES];
 	{
 
-		timestamp_t time = 10000;
+		suo_timestamp_t time = 10000;
 
 		const struct transmitter_code* gmsk = &mod_gmsk_code;
 		CU_ASSERT(gmsk->name != NULL);
@@ -108,7 +108,7 @@ static void test_gmsk(void)
 		gmsk->set_symbol_source(gmsk_inst, source_dummy_symbols, (void*)0xdeadbeef);
 
 		int ret;
-		unsigned int total_samples = 0; 
+		unsigned int total_samples = 0;
 		for (int i = 0; i < 1000; i++) {
 
 			ret = gmsk->source_samples(gmsk_inst, samples, MAX_SAMPLES, time);
