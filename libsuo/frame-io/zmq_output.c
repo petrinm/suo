@@ -165,7 +165,7 @@ static void *zmq_decoder_main(void *arg)
 			printf("Decoded:\n");
 			suo_frame_print(decoded, SUO_PRINT_DATA | SUO_PRINT_METADATA | SUO_PRINT_COLOR);
 
-			if (suo_zmq_send_frame(self->z_rx_pub, decoded) < 0)
+			if (suo_zmq_send_frame(self->z_rx_pub, decoded, ZMQ_DONTWAIT) < 0)
 				goto fail;
 
 		} else {
@@ -193,7 +193,14 @@ static int zmq_output_sink_frame(void *arg, const struct frame *frame, suo_times
 	if (s == NULL)
 		s = self->z_rx_pub; // return -1;
 
-	return suo_zmq_send_frame(s, frame);
+#if 0
+	frame->hdr.id = SUO_MSG_RECEIVE;
+	frame->hdr.flags = 0;
+
+	if (frame->hdr.timestamp == 0)
+		frame->hdr.timestamp = timestamp;
+#endif
+	return suo_zmq_send_frame(s, frame, ZMQ_DONTWAIT);
 }
 
 
@@ -206,7 +213,7 @@ static int zmq_output_tick(void *arg, unsigned int flags, suo_timestamp_t timeno
 		return -1;
 
 	struct frame_header msg = {
-		.id = SUO_FLAGS_TIMING,
+		.id = SUO_MSG_TIMING,
 		.flags = flags,
 		.timestamp = timenow,
 	};

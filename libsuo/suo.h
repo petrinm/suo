@@ -58,16 +58,28 @@ struct any_code {
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 };
 
-
-#define SUO_OK        0
-#define SUO_ERROR      -1
+/* Suo return codes */
+#define SUO_OK                   0
+#define SUO_ERROR                -1
+#define SUO_ZMQ_ERROR            -2
 #define SUO_ERR_NOT_IMPLEMENTED  -3
+
+/* Suo message identifiers */
+#define SUO_MSG_RECEIVE          0x0001
+#define SUO_MSG_TRANSMIT         0x0002
+#define SUO_MSG_TIMING           0x0003
+
+/* Suo message flags */
+#define SUO_FLAGS_HAS_TIMESTAMP  0x0100
+#define SUO_FLAGS_TX_ACTIVE      0x0200
+#define SUO_FLAGS_RX_ACTIVE      0x0400
+#define SUO_FLAGS_RX_LOCKED      0x0800
+
 
 /* Flag to prevent transmission of a frame if it's too late,
  * i.e. if the timestamp is already in the past */
-#define SUO_FLAGS_NO_LATE     0x40000
-#define SUO_FLAGS_TX_ACTIVE   0x20000
-#define SUO_FLAGS_TIMING    0x8000000
+
+#define SUO_FLAGS_NO_LATE     0x010000
 
 
 
@@ -105,7 +117,6 @@ typedef int(*tick_sink_t)(void*, unsigned int flags, suo_timestamp_t timestamp);
 
 typedef int(*frame_source_t)(void*, struct frame *frame, suo_timestamp_t timestamp);
 typedef int(*frame_sink_t)(void*, const struct frame *frame, suo_timestamp_t timestamp);
-
 
 typedef int(*symbol_source_t)(void*, symbol_t *symbols, size_t max_symbols, suo_timestamp_t timestamp);
 //typedef int(*symbol_sink_t)(void*, symbol_t *symbols, size_t max_symbols, suo_timestamp_t timestamp);

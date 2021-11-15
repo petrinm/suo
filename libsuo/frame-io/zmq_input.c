@@ -121,12 +121,12 @@ fail:
 
 
 /* Send a frame to ZMQ socket */
-int suo_zmq_send_frame(void* sock, const struct frame *frame) {
+int suo_zmq_send_frame(void* sock, const struct frame *frame, int flags) {
 	assert(sock != NULL && frame != NULL);
 	int ret;
 
 	/* Send frame header field */
-	ret = zmq_send(sock, &frame->hdr, sizeof(struct frame_header), ZMQ_SNDMORE | ZMQ_DONTWAIT);
+	ret = zmq_send(sock, &frame->hdr, sizeof(struct frame_header), flags | ZMQ_SNDMORE);
 	if(ret < 0) {
 		print_fail_zmq("zmq_send_frame:hdr", ret);
 		goto fail;
@@ -157,7 +157,7 @@ fail:
 
 
 /* Receive a frame from ZMQ socket */
-int suo_zmq_recv_frame(void* sock, struct frame *frame) {
+int suo_zmq_recv_frame(void* sock, struct frame *frame, int flags) {
 	assert(sock != NULL);
 	int ret;
 
@@ -168,7 +168,7 @@ int suo_zmq_recv_frame(void* sock, struct frame *frame) {
 	frame->metadata_len = 0;
 
 	/* Read the first part */
-	ret = zmq_recv(sock, &frame->hdr, sizeof(struct frame_header), ZMQ_DONTWAIT);
+	ret = zmq_recv(sock, &frame->hdr, sizeof(struct frame_header), flags);
 	if (ret == 0 || (ret == -1 && errno == EAGAIN))
 		return 0;  /* No frame in queue */
 
@@ -245,7 +245,7 @@ static void *zmq_encoder_main(void *arg)
 	while (self->encoder_running) {
 
 		// Receive from interprocess PAIR
-		if ((ret = suo_zmq_recv_frame(self->z_tx_sub, encoded)) < 0) {
+		if ((ret = suo_zmq_recv_frame(self->z_tx_sub, encoded, 0)) < 0) {
 			fprintf(stderr, "zmq_recv_frame: %d\n", ret);
 			//break;
 			continue;
@@ -259,7 +259,7 @@ static void *zmq_encoder_main(void *arg)
 
 
 		//assert(nbits <= ENCODED_MAXLEN);
-		suo_zmq_send_frame(self->z_txbuf_w, encoded);
+		suo_zmq_send_frame(self->z_txbuf_w, encoded, ZMQ_DONTWAIT);
 
 	}
 
@@ -281,7 +281,10 @@ static int zmq_input_source_frame(void* arg, struct frame *frame, suo_timestamp_
 	if (s == NULL)
 		s = self->z_tx_sub;
 
-	int ret = suo_zmq_recv_frame(s, frame);
+	int ret = suo_zmq_recv_frame(s, frame, ZMQ_DONTWAIT);
+	if (frame->hdr.id != SUO_MSG_TRANSMIT)
+		return 0;
+
 	if (ret == 1)
 		suo_frame_print(frame, SUO_PRINT_DATA);
 	return ret;
@@ -320,7 +323,7 @@ static int zmq_input_tick(void *arg, unsigned int flags, suo_timestamp_t timenow
 		goto fail;
 
 	struct frame_header msg = {
-		.id = SUO_FLAGS_TIMING,
+		.id = SUO_MSG_TIMING,
 		.flags = flags,
 		.timestamp = timenow,
 	};

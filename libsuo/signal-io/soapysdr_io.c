@@ -325,8 +325,14 @@ static int soapysdr_io_execute(void *arg)
 		/* Send ticks */
 		if (self->tick_sink != NULL) {
 			unsigned int flags = 0;
+
+			if (1) // TODO
+				flags |= SUO_FLAGS_RX_ACTIVE;
+			if (0) // TODO
+				flags |= SUO_FLAGS_RX_LOCKED;
 			if (tx_burst_going == 1)
 				flags |= SUO_FLAGS_TX_ACTIVE;
+
 			self->tick_sink(self->tick_sink_arg, flags, current_time);
 		}
 
