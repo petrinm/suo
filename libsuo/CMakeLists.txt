@@ -3,21 +3,7 @@
 #
 
 project(suo C)
-set(CMAKE_C_STANDARD 11)
-
-
-# Setup SoapySDR
-find_package(SoapySDR REQUIRED)
-include_directories(${SOAYPSDR_INCLUDE_DIRS})
-
-
-# Setup Liquid-DSP
-find_package(LiquidDSP REQUIRED)
-include_directories(${LIQUIDDSP_INCLUDES})
-
-# Setup ZMQ
-find_package(ZeroMQ REQUIRED)
-include_directories(${ZMQ_INCLUDES})
+#set(CMAKE_C_STANDARD 11)
 
 add_compile_options(-g -Wall -Wextra)
 
@@ -26,10 +12,11 @@ add_compile_options(-g -Wall -Wextra)
 add_library(suo SHARED
     suo.c
     metadata.c
+#    mux.c
 #    modem/burst_dpsk_receiver.c
     modem/demod_fsk_corrbank.c
     modem/demod_fsk_mfilt.c
-    modem/demod_fsk_quad.c
+#    modem/demod_fsk_quad.c
     modem/demod_gmsk.c
     modem/mod_fsk.c
     modem/mod_gmsk.c
@@ -45,24 +32,43 @@ add_library(suo SHARED
     framing/utils.c
     frame-io/zmq_input.c
     frame-io/zmq_output.c
+#    frame-io/file_dump.c
     signal-io/file_io.c
     signal-io/soapysdr_io.c
 )
 
 
-target_include_directories(suo PUBLIC ${PROJECT_SOURCE_DIR})
 
-target_link_libraries(suo ${SoapySDR_LIBRARIES})
-target_link_libraries(suo ${ZMQ_LIBRARIES})
-target_link_libraries(suo ${LIQUID_LIBRARIES})
+include(CMakeFindDependencyMacro)
+
+target_include_directories(suo PUBLIC ${PROJECT_SOURCE_DIR})
+target_link_libraries(suo PUBLIC m)
+
+# Setup SoapySDR
+find_dependency(SoapySDR REQUIRED)
+target_include_directories(suo PRIVATE ${SoapySDR_INCLUDE_DIRS})
+target_link_libraries(suo PUBLIC ${SoapySDR_LIBRARIES})
+
+# Setup Liquid-DSP
+find_dependency(LiquidDSP REQUIRED)
+target_include_directories( suo PRIVATE ${LIQUIDDSP_INCLUDE_DIRS})
+target_link_libraries(suo PUBLIC ${LIQUID_LIBRARIES})
+
+# Setup ZMQ
+find_dependency(ZeroMQ REQUIRED)
+target_include_directories( suo PUBLIC ${ZMQ_INCLUDE_DIRS})
+target_link_libraries(suo PUBLIC ${ZMQ_LIBRARIES})
+
+
+target_compile_features(suo PUBLIC cxx_std_11)
 
 
 # Find ALSA
 find_package(ALSA)
-if (ALSA_FOUND)
+if (ALSA_FOUNDD)
     target_sources(suo PRIVATE signal-io/alsa_io.c)
     add_definitions(-DENABLE_ALSA)
-    target_link_libraries(suo ${ALSA_LIBRARIES})
+    target_link_libraries(suo PUBLIC ${ALSA_LIBRARIES})
 endif()
 
 
