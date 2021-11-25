@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <assert.h>
 
@@ -16,12 +17,14 @@
 #include "framing/golay_deframer.h"
 
 
-
+#define ZMQ_URI_LEN 64
 
 int main(int argc, char *argv[])
 {
-	(void)argc;
-	(void)argv;
+
+	int modem_base = 4000;
+	if (argc >= 2)
+		modem_base = atoi(argv[1]);
 
 	/*
 	 * SDR
@@ -43,7 +46,7 @@ int main(int argc, char *argv[])
 	sdr_conf->tx_centerfreq = 437.00e6;
 
 	sdr_conf->rx_gain = 50;
-	sdr_conf->tx_gain = 60;
+	sdr_conf->tx_gain = 20;
 
 	sdr_conf->rx_antenna = "TX/RX";
 	sdr_conf->tx_antenna = "TX/RX";
@@ -108,8 +111,10 @@ int main(int argc, char *argv[])
 	 */
 	const struct rx_output_code *zmq_output = &zmq_rx_output_code;
 	struct zmq_rx_output_conf* zmq_output_conf = (struct zmq_rx_output_conf*)zmq_output->init_conf();
-	zmq_output_conf->address = "tcp://*:43300";
-	zmq_output_conf->address_tick = "tcp://*:43302";
+	zmq_output_conf->address = calloc(ZMQ_URI_LEN, sizeof(char));
+	zmq_output_conf->address_tick = calloc(ZMQ_URI_LEN, sizeof(char));
+	snprintf(zmq_output_conf->address , ZMQ_URI_LEN, "tcp://127.0.0.1:%d", modem_base);
+	snprintf(zmq_output_conf->address_tick , ZMQ_URI_LEN, "tcp://127.0.0.1:%d", modem_base + 2);
 	zmq_output_conf->binding = 1;
 	zmq_output_conf->binding_ticks =  1;
 	zmq_output_conf->thread = 1;
@@ -154,8 +159,10 @@ int main(int argc, char *argv[])
 	 */
 	const struct tx_input_code *zmq_input = &zmq_tx_input_code;
 	struct zmq_tx_input_conf* zmq_input_conf = (struct zmq_tx_input_conf*)zmq_input->init_conf();
-	zmq_input_conf->address = "tcp://*:43301";
-	zmq_input_conf->address_tick = "tcp://*:43303";
+	zmq_input_conf->address = calloc(ZMQ_URI_LEN, sizeof(char));
+	zmq_input_conf->address_tick = calloc(ZMQ_URI_LEN, sizeof(char));
+	snprintf(zmq_input_conf->address, ZMQ_URI_LEN, "tcp://127.0.0.1:%d", modem_base + 1);
+	snprintf(zmq_input_conf->address_tick , ZMQ_URI_LEN, "tcp://127.0.0.1:%d", modem_base + 3);
 	zmq_input_conf->binding = 1;
 	zmq_input_conf->binding_ticks =  1;
 	zmq_input_conf->thread = 1;
@@ -174,6 +181,10 @@ int main(int argc, char *argv[])
 
 	//deframer->set_frame_sink(deframer_9k6_inst, zmq_input, zmq_input_inst);
 	//deframer->set_frame_sink(deframer_12k6_inst, zmq_input, zmq_input_inst);
+
+
+
+	zmq_input->reset(zmq_input_inst);
 
 	/*
 	 * Run!
