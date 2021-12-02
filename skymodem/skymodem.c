@@ -73,7 +73,7 @@ int main(int argc, char *argv[])
 	deframer_conf->sync_len = 32;
 	deframer_conf->sync_threshold = 3;
 	deframer_conf->skip_rs = 1;
-	deframer_conf->skip_randomizer = 0;
+	deframer_conf->skip_randomizer = 1;
 	deframer_conf->skip_viterbi = 1;
 
 
@@ -147,10 +147,10 @@ int main(int argc, char *argv[])
 	framer_conf->sync_len = 32;
 	framer_conf->preamble_len = 64;
 	framer_conf->use_viterbi = 0;
-	framer_conf->use_randomizer = 1;
+	framer_conf->use_randomizer = 0;
 	framer_conf->use_rs = 0;
 	framer_conf->tail_length = 16;
-	framer_conf->golay_flags = 0x200; // Force RS flag on
+	framer_conf->golay_flags = 0x600; // Force RS flag on
 	void* framer_inst = framer->init(framer_conf);
 	assert(framer_inst);
 
