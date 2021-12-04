@@ -45,10 +45,8 @@ void suo_frame_clear(struct frame* frame) {
 		return;
 
 	memset(&frame->hdr, 0, sizeof(struct frame_header));
-#if 1
-	memset(frame->metadata, 0, frame->data_alloc);
 	memset(frame->metadata, 0, MAX_METADATA * sizeof(struct metadata));
-#endif
+
 	frame->metadata_len = 0;
 	frame->data_len = 0;
 }
