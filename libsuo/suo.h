@@ -160,6 +160,7 @@ struct rx_output_code {
 	const char *name;
 	void *(*init)      (const void *conf);
 	int   (*destroy)   (void *);
+	int   (*reset)     (void *);
 	void *(*init_conf) (void);
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
@@ -182,6 +183,7 @@ struct receiver_code {
 	const char *name;
 	void *(*init)          (const void *conf);
 	int   (*destroy)       (void *);
+	int   (*reset)         (void *);
 	void *(*init_conf)     (void);
 	int   (*set_conf)      (void *conf, const char *parameter, const char *value);
 
@@ -204,6 +206,7 @@ struct encoder_code {
 	const char *name;
 	void *(*init)      (const void *conf);
 	int   (*destroy)   (void *);
+	int   (*reset)     (void *);
 	void *(*init_conf) (void);
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 
@@ -228,6 +231,7 @@ struct tx_input_code {
 	const char *name;
 	void *(*init)      (const void *conf);
 	int   (*destroy)   (void *);
+	int   (*reset)   (void *);
 	void *(*init_conf) (void);
 	int   (*set_conf)  (void *conf, const char *parameter, const char *value);
 

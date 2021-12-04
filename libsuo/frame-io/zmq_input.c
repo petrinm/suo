@@ -90,6 +90,19 @@ fail:
 }
 
 
+static int zmq_input_reset(void *arg) {
+	struct zmq_input *self = (struct zmq_input *)arg;
+
+	/* Flush possible queued frames */
+	char temp[1024];
+	int rx_timeout = 500; // [ms]
+	zmq_setsockopt(self->z_tx_sub, ZMQ_RCVTIMEO, &rx_timeout, sizeof(rx_timeout));
+	while (zmq_recv(self->z_tx_sub, temp, 1024, 0) >= 0);
+
+	return SUO_OK;
+}
+
+
 static int zmq_input_set_callbacks(void *arg, const struct encoder_code *encoder, void *encoder_arg)
 {
 	struct zmq_input *self = (struct zmq_input *)arg;
@@ -129,7 +142,7 @@ int suo_zmq_send_frame(void* sock, const struct frame *frame, int flags) {
 	ret = zmq_send(sock, &frame->hdr, sizeof(struct frame_header), flags | ZMQ_SNDMORE);
 	if(ret < 0) {
 		print_fail_zmq("zmq_send_frame:hdr", ret);
-		goto fail;
+		return SUO_ZMQ_ERROR;
 	}
 
 	// Control frame without actual payload
@@ -140,14 +153,14 @@ int suo_zmq_send_frame(void* sock, const struct frame *frame, int flags) {
 	ret = zmq_send(sock, frame->metadata, frame->metadata_len * sizeof(struct metadata), ZMQ_SNDMORE | ZMQ_DONTWAIT);
 	if(ret < 0) {
 		print_fail_zmq("zmq_send_frame:meta", ret);
-		goto fail;
+		return SUO_ZMQ_ERROR;
 	}
 
 	/* Send frame data */
 	ret = zmq_send(sock, frame->data, frame->data_len, ZMQ_DONTWAIT);
 	if(ret < 0) {
 		print_fail_zmq("zmq_send_frame:data", ret);
-		goto fail;
+		return SUO_ZMQ_ERROR;
 	}
 
 	return 0;
@@ -166,6 +179,7 @@ int suo_zmq_recv_frame(void* sock, struct frame *frame, int flags) {
 
 	frame->data_len = 0;
 	frame->metadata_len = 0;
+
 
 	/* Read the first part */
 	ret = zmq_recv(sock, &frame->hdr, sizeof(struct frame_header), flags);
@@ -201,18 +215,18 @@ int suo_zmq_recv_frame(void* sock, struct frame *frame, int flags) {
 	}
 	if (ret % sizeof(struct metadata) != 0) {
 		fprintf(stderr, "zmq_recv_frame: Amount off metadata is strange %d\n", ret);
-		return -102;
+		return SUO_ZMQ_ERROR;
 	}
 
 	if (zmq_getsockopt(sock, ZMQ_RCVMORE, &more, &more_size) < 0 || more != 1) {
 		fprintf(stderr, "zmq_recv_frame: Confustion with more: %ld\n", more);
-		return -103;
+		return SUO_ZMQ_ERROR;
 	}
 
 	// Make sure we have an allocation
 	//frame = suo_frame_resize(frame, 256);
 	if (frame->data == NULL || frame->data_alloc == 0)
-		return -104;
+		return SUO_ZMQ_ERROR;
 
 	/* Read data */
 	ret = zmq_recv(sock, frame->data, frame->data_alloc, ZMQ_DONTWAIT);
@@ -224,7 +238,7 @@ int suo_zmq_recv_frame(void* sock, struct frame *frame, int flags) {
 
 	if (zmq_getsockopt(sock, ZMQ_RCVMORE, &more, &more_size) < 0 || more != 0) {
 		fprintf(stderr, "zmq_recv_frame: Confustion with more: %ld\n", more);
-		return -105;
+		return SUO_ZMQ_ERROR;
 	}
 
 	return 1;
@@ -367,7 +381,8 @@ CONFIG_END()
 const struct tx_input_code zmq_tx_input_code = {
 	.name = "zmq_input",
 	.init = zmq_input_init,
-	.destroy= zmq_input_destroy,
+	.destroy = zmq_input_destroy,
+	.reset = zmq_input_reset,
 	.init_conf = init_conf,
 	.set_conf = set_conf,
 	.set_frame_sink = set_frame_sink,
