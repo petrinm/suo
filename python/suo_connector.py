@@ -20,6 +20,19 @@ METADATA_IDENTS = {
 }
 
 
+# Suo message identifiers
+SUO_MSG_RECEIVE          = 0x0001
+SUO_MSG_TRANSMIT         = 0x0002
+SUO_MSG_TIMING           = 0x0003
+
+# Suo message flags
+SUO_FLAGS_HAS_TIMESTAMP  = 0x0100
+SUO_FLAGS_TX_ACTIVE      = 0x0200
+SUO_FLAGS_RX_ACTIVE      = 0x0400
+SUO_FLAGS_RX_LOCKED      = 0x0800
+
+
+
 class SuoFrame:
     """
     Class for serializing and deserializing Suo frames to/from bytes
@@ -35,7 +48,7 @@ class SuoFrame:
         """
         Initialize an empty frame object
         """
-        self.id = 0
+        self.id = 2
         self.flags = 0
         self.timestamp = 0
         self.data = b""
@@ -129,7 +142,7 @@ class SuoFrame:
 class SuoInterface:
 
     def __init__(self,
-            base: int=43700,
+            base: int=4000,
             ticks: bool=False
         ):
         """
@@ -166,6 +179,7 @@ class SuoInterface:
         if isinstance(frame, bytes):
             data = frame
             frame = SuoFrame()
+            frame.id = SUO_MSG_TRANSMIT
             frame.data = data
 
         self.up.send_multipart(frame.to_bytes())
@@ -192,10 +206,10 @@ class SuoInterface:
 if __name__ == "__main__":
     import sys, time
 
-    suo = SuoInterface(43300)
-    if sys.argv[0] == "tx":
+    suo = SuoInterface(base=4000)
+    if len(sys.argv) > 1 and sys.argv[1] == "tx":
         for i in range(1000):
-            suo.transmit_raw(b"hello_%d" % i)
+            suo.transmit(b"hello_%d" % i)
             time.sleep(1)
 
     else:
