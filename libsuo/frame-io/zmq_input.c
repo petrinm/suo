@@ -197,6 +197,7 @@ int suo_zmq_recv_frame(void* sock, struct frame *frame, int flags) {
 	}
 	zmq_getsockopt(sock, ZMQ_RCVMORE, &more, &more_size);
 
+
 	// If case of control frame, there are no more parts.
 	if (more == 0)
 		return 1;
@@ -296,13 +297,15 @@ static int zmq_input_source_frame(void* arg, struct frame *frame, suo_timestamp_
 		s = self->z_tx_sub;
 
 	int ret = suo_zmq_recv_frame(s, frame, ZMQ_DONTWAIT);
-	if (frame->hdr.id != SUO_MSG_TRANSMIT) {
-		fprintf(stderr, "Warning: ZMQ input received non-transmit frame type: %d\n", frame->hdr.id);
-		return 0;
+	if (ret == 1) {
+		if (frame->hdr.id != SUO_MSG_TRANSMIT) {
+			fprintf(stderr, "Warning: ZMQ input received non-transmit frame type: %d\n", frame->hdr.id);
+			return 0;
+		}
+
+		suo_frame_print(frame, SUO_PRINT_DATA);
 	}
 
-	if (ret == 1)
-		suo_frame_print(frame, SUO_PRINT_DATA);
 	return ret;
 }
 
