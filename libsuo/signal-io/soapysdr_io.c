@@ -242,6 +242,9 @@ static int soapysdr_io_execute(void *arg)
 				if (tx_burst_going == 0 /*&& !self->c.half_duplex*/)
 					self->sample_sink(self->sample_sink_arg, rxbuf, ret, rx_timestamp);
 
+			}
+			else if (ret == SOAPY_SDR_OVERFLOW) {
+				fprintf(stderr, "RX OVERFLOW\n");
 			} else if(ret <= 0) {
 				soapy_fail("SoapySDRDevice_readStream", ret);
 				goto exit_soapy;
