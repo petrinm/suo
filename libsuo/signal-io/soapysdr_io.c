@@ -90,6 +90,18 @@ static int soapysdr_io_execute(void *arg)
 	 ---- Hardware initialization ----
 	 ---------------------------------*/
 
+#if 0
+	fprintf(stderr, "Configuring USRP GPIO\n");
+	unsigned int gpio_mask = 0x100;
+	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:CTRL", gpio_mask, gpio_mask);
+	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:DDR", gpio_mask, gpio_mask);
+	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:ATR_0X", 0, gpio_mask);
+	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:ATR_RX", 0, gpio_mask);
+	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:ATR_TX", gpio_mask, gpio_mask);
+	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:ATR_XX", gpio_mask, gpio_mask);
+#endif
+
+
 #ifdef _WIN32
 	SetConsoleCtrlHandler(winhandler, TRUE);
 #else
