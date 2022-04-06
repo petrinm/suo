@@ -195,6 +195,20 @@ struct receiver_code {
 };
 
 
+struct sample_mux_code {
+	const char *name;
+	void *(*init)          (const void *conf);
+	int   (*destroy)       (void *);
+	int   (*reset)         (void *);
+	void *(*init_conf)     (void);
+	int   (*set_conf)      (void *conf, const char *parameter, const char *value);
+
+	// Set callback to an rx_output module which is called when a frame has been received
+	int   (*set_sample_sink) (void *, sample_sink_t callback, void* arg);
+	sample_sink_t sink_samples;
+};
+
+
 /* ------------------------------------------
  * Transmit related interfaces and data types
  * ------------------------------------------ */

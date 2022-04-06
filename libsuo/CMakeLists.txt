@@ -12,7 +12,7 @@ add_compile_options(-g -Wall -Wextra)
 add_library(suo SHARED
     suo.c
     metadata.c
-#    mux.c
+    mux.c
 #    modem/burst_dpsk_receiver.c
     modem/demod_fsk_corrbank.c
     modem/demod_fsk_mfilt.c

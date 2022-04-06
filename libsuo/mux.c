@@ -13,24 +13,27 @@ struct sample_sink_mux {
 	struct sample_sink_list* sinks;
 };
 
-static void* sample_sink_mux_init(void* confv) {
+static void* sample_sink_mux_init(const void* confv) {
 	(void)confv;
 	struct sample_sink_mux* self = calloc(1, sizeof(struct sample_sink_mux));
 	return self;
 }
 
-static int sample_sink_mux_sink_samples(void* arg, const sample_t *samples, size_t num_samples, timestamp_t timestamp) {
+static int sample_sink_mux_sink_samples(void* arg, const sample_t *samples, size_t num_samples, suo_timestamp_t timestamp) {
 	struct sample_sink_mux *self = arg;
 	struct sample_sink_list* iter = self->sinks;
 	while (iter != NULL) {
 		iter->sink(iter->arg, samples, num_samples, timestamp);
 		iter = iter->next;
 	}
+	return SUO_OK;
 }
+
+
 static int sample_sink_mux_destroy(void* arg) {
 	struct sample_sink_mux *self = arg;
 	if (self == NULL)
-		return;
+		return SUO_OK;
 
 	struct sample_sink_list* iter = self->sinks;
 	while (iter != NULL) {
@@ -43,9 +46,10 @@ static int sample_sink_mux_destroy(void* arg) {
 	self->sinks = NULL;
 
 	free(self);
+	return SUO_OK;
 }
 
-static int sample_sink_mux_set_sample_sink(void* arg, tick_sink_t callback, void* callback_arg) {
+static int sample_sink_mux_set_sample_sink(void* arg, sample_sink_t callback, void* callback_arg) {
 	struct sample_sink_mux *self = arg;
 	if (callback == NULL || callback_arg == NULL)
 		return suo_error(-3, "NULL sample source");
@@ -68,11 +72,12 @@ static int sample_sink_mux_set_sample_sink(void* arg, tick_sink_t callback, void
 	return SUO_OK;
 }
 
-const struct encoder_code sample_sink_mux_code = {
+const struct sample_mux_code sample_sink_mux_code = {
 	.name = "sample_sink_mux",
 	.init = sample_sink_mux_init,
 	.destroy = sample_sink_mux_destroy,
 	.set_sample_sink = sample_sink_mux_set_sample_sink,
+	.sink_samples = sample_sink_mux_sink_samples,
 };
 
 
@@ -81,7 +86,7 @@ const struct encoder_code sample_sink_mux_code = {
 struct sample_source_list {
 	sample_source_t source;
 	void* arg;
-	struct sample_sink_list* next;
+	struct sample_source_list* next;
 };
 
 struct sample_source_mux {
@@ -90,13 +95,13 @@ struct sample_source_mux {
 };
 
 
-static void* sample_source_mux_init(void* confv) {
+static void* sample_source_mux_init(const void* confv) {
 	(void)confv;
 	struct sample_source_mux* self = calloc(1, sizeof(struct sample_source_mux));
 	return self;
 }
 
-static int sample_source_mux_source_samples(void* arg, const sample_t *samples, size_t num_samples, timestamp_t timestamp) {
+static int sample_source_mux_source_samples(void* arg, const sample_t *samples, size_t num_samples, suo_timestamp_t timestamp) {
 	int ret = 0;
 	struct sample_source_mux *self = arg;
 	if (self->active == NULL) {
@@ -142,7 +147,8 @@ static int sample_source_mux_destroy(void* arg) {
 	return SUO_OK;
 }
 
-static int sample_source_mux_set_sample_source(void* arg, tick_source_t callback, void* callback_arg) {
+
+static int sample_source_mux_set_sample_source(void* arg, sample_source_t callback, void* callback_arg) {
 	struct sample_source_mux *self = arg;
 	if (callback == NULL || callback_arg == NULL)
 		return suo_error(-3, "NULL sample source");
@@ -165,9 +171,11 @@ static int sample_source_mux_set_sample_source(void* arg, tick_source_t callback
 	return SUO_OK;
 }
 
+/*
 const struct encoder_code sample_source_mux_code = {
 	.name = "sample_source_mux",
 	.init = sample_source_mux_init,
 	.destroy = sample_source_mux_destroy,
 	.set_sample_source = sample_source_mux_set_sample_source,
 };
+*/
