@@ -9,6 +9,7 @@
 #include <math.h>
 
 #include "suo.h"
+#include "mux.h"
 #include "signal-io/soapysdr_io.h"
 #include "modem/demod_fsk_mfilt.h"
 #include "modem/mod_gmsk.h"
@@ -36,6 +37,7 @@ int main(int argc, char *argv[])
 	sdr_conf->tx_on = 1;
 	sdr_conf->use_time = 1;
 	sdr_conf->samplerate = 500000;
+	sdr_conf->tx_latency = 100; // [samples]
 
 	//sdr_conf->buffer = 1024;
 	sdr_conf->buffer = (sdr_conf->samplerate / 1000); // buffer lenght in milliseconds
@@ -45,11 +47,12 @@ int main(int argc, char *argv[])
 	sdr_conf->rx_centerfreq = 437.00e6;
 	sdr_conf->tx_centerfreq = 437.00e6;
 
-	sdr_conf->rx_gain = 50;
-	sdr_conf->tx_gain = 20;
+	sdr_conf->rx_gain = 30;
+	sdr_conf->tx_gain = 60;
 
 	sdr_conf->rx_antenna = "TX/RX";
 	sdr_conf->tx_antenna = "TX/RX";
+
 
 	void* sdr_inst = sdr->init(sdr_conf);
 	assert(sdr_inst);
@@ -61,7 +64,7 @@ int main(int argc, char *argv[])
 	const struct receiver_code *receiver = &demod_fsk_mfilt_code;
 	struct fsk_demod_mfilt_conf* receiver_conf = (struct fsk_demod_mfilt_conf*)receiver->init_conf();
 	receiver_conf->sample_rate = sdr_conf->samplerate;
-	receiver_conf->center_frequency = 108.0e3;
+	receiver_conf->center_frequency = 125.0e3;
 
 	/*
 	 * Setup frame decoder
@@ -93,16 +96,26 @@ int main(int argc, char *argv[])
 	assert(deframer_19k2_inst);
 	receiver->set_symbol_sink(receiver_19k2_inst, deframer->sink_symbol, deframer_19k2_inst);
 
-#if 1
+	/* For 36400 baud */
+	receiver_conf->symbol_rate = 36400;
+	void* receiver_36k4_inst = receiver->init(receiver_conf);
+	assert(receiver_36k4_inst);
+	void* deframer_36k4_inst = deframer->init(deframer_conf);
+	assert(deframer_36k4_inst);
+	receiver->set_symbol_sink(receiver_36k4_inst, deframer->sink_symbol, deframer_36k4_inst);
+
+
+#if 0
 	sdr->set_sample_sink(sdr_inst, receiver->sink_samples, receiver_9k6_inst);
 #else
 	/*
 	 * Create sample mux
 	 */
-	const struct decoder_code *sample_mux = &sample_sink_mux_code;
+	const struct sample_mux_code *sample_mux = &sample_sink_mux_code;
 	void* sample_mux_inst = sample_mux->init(NULL); /* No configurations */
 	sample_mux->set_sample_sink(sample_mux_inst, receiver->sink_samples, receiver_9k6_inst);
 	sample_mux->set_sample_sink(sample_mux_inst, receiver->sink_samples, receiver_19k2_inst);
+	sample_mux->set_sample_sink(sample_mux_inst, receiver->sink_samples, receiver_36k4_inst);
 	sdr->set_sample_sink(sdr_inst, sample_mux->sink_samples, sample_mux_inst);
 #endif
 
@@ -113,8 +126,8 @@ int main(int argc, char *argv[])
 	struct zmq_rx_output_conf* zmq_output_conf = (struct zmq_rx_output_conf*)zmq_output->init_conf();
 	zmq_output_conf->address = calloc(ZMQ_URI_LEN, sizeof(char));
 	zmq_output_conf->address_tick = calloc(ZMQ_URI_LEN, sizeof(char));
-	snprintf(zmq_output_conf->address , ZMQ_URI_LEN, "tcp://127.0.0.1:%d", modem_base);
-	snprintf(zmq_output_conf->address_tick , ZMQ_URI_LEN, "tcp://127.0.0.1:%d", modem_base + 2);
+	snprintf(zmq_output_conf->address, ZMQ_URI_LEN, "tcp://127.0.0.1:%d", modem_base);
+	snprintf(zmq_output_conf->address_tick, ZMQ_URI_LEN, "tcp://127.0.0.1:%d", modem_base + 2);
 	zmq_output_conf->binding = 1;
 	zmq_output_conf->binding_ticks =  1;
 	zmq_output_conf->thread = 1;
@@ -124,6 +137,7 @@ int main(int argc, char *argv[])
 
 	deframer->set_frame_sink(deframer_9k6_inst, zmq_output->sink_frame, zmq_output_inst);
 	deframer->set_frame_sink(deframer_19k2_inst, zmq_output->sink_frame, zmq_output_inst);
+	deframer->set_frame_sink(deframer_36k4_inst, zmq_output->sink_frame, zmq_output_inst);
 	sdr->set_tick_sink(sdr_inst, zmq_output->sink_tick, zmq_output_inst);
 
 	/*
@@ -133,7 +147,7 @@ int main(int argc, char *argv[])
 	struct mod_gmsk_conf* transmitter_conf = (struct mod_gmsk_conf*)transmitter->init_conf();
 	transmitter_conf->samplerate = sdr_conf->samplerate;
 	transmitter_conf->symbolrate = 9600;
-	transmitter_conf->centerfreq = 108.0e3;
+	transmitter_conf->centerfreq = 125.0e3;
 	transmitter_conf->bt = 0.5;
 	void* transmitter_inst = transmitter->init(transmitter_conf);
 	assert(transmitter_inst);
@@ -164,7 +178,7 @@ int main(int argc, char *argv[])
 	snprintf(zmq_input_conf->address, ZMQ_URI_LEN, "tcp://127.0.0.1:%d", modem_base + 1);
 	snprintf(zmq_input_conf->address_tick , ZMQ_URI_LEN, "tcp://127.0.0.1:%d", modem_base + 3);
 	zmq_input_conf->binding = 1;
-	zmq_input_conf->binding_ticks =  1;
+	zmq_input_conf->binding_ticks = 1;
 	zmq_input_conf->thread = 1;
 
 
