@@ -90,17 +90,6 @@ static int soapysdr_io_execute(void *arg)
 	 ---- Hardware initialization ----
 	 ---------------------------------*/
 
-#if 0
-	fprintf(stderr, "Configuring USRP GPIO\n");
-	unsigned int gpio_mask = 0x100;
-	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:CTRL", gpio_mask, gpio_mask);
-	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:DDR", gpio_mask, gpio_mask);
-	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:ATR_0X", 0, gpio_mask);
-	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:ATR_RX", 0, gpio_mask);
-	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:ATR_TX", gpio_mask, gpio_mask);
-	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:ATR_XX", gpio_mask, gpio_mask);
-#endif
-
 
 #ifdef _WIN32
 	SetConsoleCtrlHandler(winhandler, TRUE);
@@ -122,6 +111,17 @@ static int soapysdr_io_execute(void *arg)
 		soapy_fail("SoapySDRDevice_make", 0);
 		goto exit_soapy;
 	}
+
+#if 0
+	fprintf(stderr, "Configuring USRP GPIO\n");
+	unsigned int gpio_mask = 0x100;
+	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:CTRL", gpio_mask, gpio_mask);
+	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:DDR", gpio_mask, gpio_mask);
+	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:ATR_0X", 0, gpio_mask);
+	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:ATR_RX", 0, gpio_mask);
+	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:ATR_TX", gpio_mask, gpio_mask);
+	SOAPYCHECK(SoapySDRDevice_writeGPIOMasked, sdr, "FP0:ATR_XX", gpio_mask, gpio_mask);
+#endif
 
 	if (conf->rx_on) {
 		fprintf(stderr, "Configuring RX\n");
@@ -209,15 +209,17 @@ static int soapysdr_io_execute(void *arg)
 	 -----------------------------*/
 
 	bool tx_burst_going = 0;
-
 	long long current_time = 0;
-	SoapySDRDevice_setHardwareTime(sdr, 0, ""); // Reset timer
-	if (conf->use_time)
+
+	if (conf->use_time) {
+		SoapySDRDevice_setHardwareTime(sdr, 0, ""); // Reset timer
+		usleep(20 * 1000);
 		current_time = SoapySDRDevice_getHardwareTime(sdr, "");
+	}
 
 	/* tx_last_end_time is when the previous produced TX buffer
 	 * ended, i.e. where the next buffer should begin */
-	long long tx_last_end_time = current_time + tx_latency_time;
+	suo_timestamp_t tx_last_end_time = current_time + tx_latency_time;
 
 	while(running) {
 		if (conf->rx_on) {
@@ -279,12 +281,12 @@ static int soapysdr_io_execute(void *arg)
 
 		if (conf->tx_on) {
 			sample_t txbuf[tx_buflen];
-			int flags = 0, ret;
+			int flags = 0, ret = 0;
 
-			suo_timestamp_t tx_from_time, tx_until_time;
-			tx_from_time = tx_last_end_time;
-			tx_until_time = current_time + tx_latency_time;
+			suo_timestamp_t tx_from_time = tx_last_end_time;
+			suo_timestamp_t tx_until_time = current_time + tx_latency_time;
 			int nsamp = round((double)(tx_until_time - tx_from_time) / sample_ns);
+
 			//fprintf(stderr, "TX nsamp: %d\n", nsamp);
 			int tx_len = 0;
 
@@ -298,7 +300,7 @@ static int soapysdr_io_execute(void *arg)
 			//if (conf->use_time)
 			//	flags = SOAPY_SDR_HAS_TIME;
 
-			if (tx_burst_going && ret == 0) {
+			if (tx_burst_going && tx_len == 0) {
 				/* If end of burst flag wasn't sent in last round,
 				 * send it now together with one dummy sample.
 				 * One sample is sent because trying to send
@@ -317,7 +319,7 @@ static int soapysdr_io_execute(void *arg)
 			if (tx_len > 0) {
 				//fprintf(stderr, "TX nsamp: %d\n", tx_len);
 				// If ntx.end does not point to end of the buffer, a burst has ended
-				if ( 0 /* ntx.end < ntx.len */) {
+				if ( 0 /* tx_len < nsamp */) {
 					flags |= SOAPY_SDR_END_BURST;
 					tx_burst_going = 0;
 				} else {
@@ -345,7 +347,7 @@ static int soapysdr_io_execute(void *arg)
 				flags |= SUO_FLAGS_RX_ACTIVE;
 			if (0) // TODO
 				flags |= SUO_FLAGS_RX_LOCKED;
-			if (tx_burst_going == 1)
+			if (tx_burst_going == 1 || tx_last_end_time > current_time)
 				flags |= SUO_FLAGS_TX_ACTIVE;
 
 			self->tick_sink(self->tick_sink_arg, flags, current_time);
