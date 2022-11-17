@@ -1,8 +1,6 @@
-project(skymodem C)
+project(skymodem CXX)
 
-set(CMAKE_C_STANDARD 11)
 add_compile_options(-g -Wall -Wextra)
 
-add_executable(skymodem skymodem.c)
+add_executable(skymodem skymodem.cpp)
 target_link_libraries(skymodem PRIVATE suo)
-target_link_libraries(skymodem PRIVATE liquid zmq SoapySDR) # <<-- Why Cmake won't resolve this!

@@ -1,19 +1,19 @@
-project(tests C)
+project(tests CXX)
 
-#add_compile_options(-L/home/aalto/suo.git/build/libsuo)
 
-find_package(CUnit REQUIRED)
+# Setup CPPUNIT library
+find_package(CPPUNIT REQUIRED)
+include_directories(${CPPUNIT_INCLUDE_DIR})
+link_libraries(${CPPUNIT_LIBRARY})
 
-set(CMAKE_C_STANDARD 11)
+
+link_libraries(suo matplot)
 add_compile_options(-g -Wall -Wextra)
 
-link_libraries(suo cunit)
-link_libraries(liquid zmq SoapySDR) # <<-- Why Cmake won't resolve this!
 
-add_executable(test_golay_framing test_golay_framing.c)
-#add_executable(test_hdlc_framing test_hdlc_framing.c)
-add_executable(test_gmsk test_gmsk.c)
-add_executable(test_zmq test_zmq.c)
-add_executable(test_utils test_utils.c)
-add_executable(test_txrx test_txrx.c)
-add_executable(test_ebno test_ebno.c)
+add_executable(test_golay_framing test_golay_framing.cpp utils.cpp)
+add_executable(test_hdlc_framing test_hdlc_framing.cpp utils.cpp)
+add_executable(test_gmsk test_gmsk.cpp utils.cpp)
+#add_executable(test_zmq test_zmq.cpp utils.cpp)
+#add_executable(test_utils test_utils.cpp utils.cpp)
+add_executable(test_ebno test_ebno.cpp utils.cpp)
