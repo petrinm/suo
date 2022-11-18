@@ -94,10 +94,14 @@ FSKModulator::~FSKModulator()
 
 void FSKModulator::reset() {
 	state = Idle;
-	symbols_i = 0;
 	symbols.clear();
+	symbols_i = 0;
+	mod_i = 0;
+	mod_samples.clear();
+
 	cpfskmod_reset(l_mod);
-	nco_crcf_destroy(l_nco);
+	nco_crcf_reset(l_nco);
+	resamp_crcf_reset(l_resamp);
 }
 
 
@@ -109,13 +113,14 @@ void FSKModulator::modulateSamples(Symbol symbol) {
 	// Generate samples from the symbol
 	cpfskmod_modulate(l_mod, symbol, mod_output);
 
-	// Mix up the samples
-	nco_crcf_mix_block_up(l_nco, mod_output, mod_output, mod_rate);
-
 	// Interpolate to final sample rate
-	unsigned int num_written = 0;
-	resamp_crcf_execute_block(l_resamp, mod_output, mod_rate, mod_samples.data(), &num_written);
-	mod_samples.resize(num_written);
+	unsigned int resampler_output = 0;
+	resamp_crcf_execute_block(l_resamp, mod_output, mod_rate, mod_samples.data(), &resampler_output);
+
+	// Mix up the samples
+	nco_crcf_mix_block_up(l_nco, mod_samples.data(), mod_samples.data(), resampler_output);
+
+	mod_samples.resize(resampler_output);
 	mod_i = 0;
 }
 
@@ -131,10 +136,10 @@ void FSKModulator::sourceSamples(SampleVector samples, Timestamp now)
 		 * Idle (check for now incoming frames)
 		 */
 		const Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity());
-		symbol_flags = 0;
 		sourceSymbols.emit(symbols, time_end);
-		
+
 		if (symbols.empty() == false) {
+			symbols.flags |= VectorFlags::start_of_burst;
 			state = Waiting;
 			symbols_i = 0;
 		}
@@ -146,8 +151,29 @@ void FSKModulator::sourceSamples(SampleVector samples, Timestamp now)
 		/*
 		 * Waiting for transmitting time
 		 */
-		if (1) // (int64_t)(now - start_timestamp) >= 0)
-			state = Transmitting;
+
+		if ((symbols.flags & has_timestamp)) {
+			// If start time is defined and in history, rise a warning 
+			if (symbols.timestamp < now) {
+				int64_t late = (int64_t)(now - symbols.timestamp);
+				if (symbols.flags & VectorFlags::no_late) {
+					cerr << "Warning: TX frame late by " << late << "ns! Discarding it!" << endl;
+					state = Idle;
+					symbols.clear();
+				}
+				else
+					cerr << "Warning: TX frame late by " << late << "ns" << endl;
+			}
+
+			// If start time is in future, don't start sample generation yet
+			const Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity());
+			if (symbols.timestamp > time_end)
+				return;
+		}
+		
+		nco_crcf_reset(l_nco);
+		nco_crcf_set_frequency(l_nco, nco_1Hz * (conf.center_frequency + conf.frequency_offset));
+		state = Transmitting;
 	}
 
 	if (state == Transmitting) {
@@ -165,9 +191,9 @@ void FSKModulator::sourceSamples(SampleVector samples, Timestamp now)
 					*write_ptr++ = mod_samples[mod_i++];
 				left -= cpy;
 
-				if (left == 0) {
+				if (mod_i != mod_samples.size()) {
 					samples.resize(samples.capacity());
-					break;
+					break;;
 				}
 			}
 
@@ -175,7 +201,7 @@ void FSKModulator::sourceSamples(SampleVector samples, Timestamp now)
 			modulateSamples(symbols[symbols_i]);
 
 			// Calculate amplitude ramp up
-			if ((symbols.flags & VectorFlags::start_of_burst) && symbols_i < conf.ramp_up_duration) {
+			if ((symbols.flags & start_of_burst) && symbols_i < conf.ramp_up_duration) {
 				const size_t ramp_duration = conf.ramp_up_duration * mod_rate;
 				const size_t hamming_window_start = symbols_i * mod_rate;
 				const size_t hamming_window_len = 2 * ramp_duration;
@@ -186,10 +212,12 @@ void FSKModulator::sourceSamples(SampleVector samples, Timestamp now)
 
 			symbols_i++;
 			if (symbols_i > symbols.size()) {
+
+				bool end_of_burst = (symbols.flags & end_of_burst) != 0;
 				symbols.clear();
 
 				// Try to source new symbols
-				if ((symbols.flags & end_of_burst) == 0) {
+				if (end_of_burst) {
 					Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity());
 					sourceSymbols.emit(symbols, time_end);
 					if (symbols.size() == 0)
@@ -223,7 +251,7 @@ void FSKModulator::sourceSamples(SampleVector samples, Timestamp now)
 					*write_ptr++ = mod_samples[mod_i++];
 				left -= cpy;
 
-				if (left == 0) {
+				if (mod_i != mod_samples.size()) {
 					samples.resize(samples.capacity());
 					break;
 				}
@@ -247,7 +275,6 @@ void FSKModulator::sourceSamples(SampleVector samples, Timestamp now)
 
 			symbols_i++;
 			if (symbols_i > trailer_length) {
-
 				// Flag end of burst
 				samples.flags |= end_of_burst;
 				samples.resize(samples.capacity() - left);

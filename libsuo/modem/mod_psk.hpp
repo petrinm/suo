@@ -10,12 +10,13 @@ namespace suo {
  */
 class PSKModulator : public Block
 {
-
+public:
 	enum State
 	{
 		Idle,
 		Waiting,
-		Transmitting
+		Transmitting,
+		Trailer
 	};
 
 	struct Config {
@@ -51,32 +52,31 @@ class PSKModulator : public Block
 
 	void setFrequencyOffset(float frequency_offset);
 
+	Port<SymbolVector&, Timestamp> sourceSymbols;
+	
 private:
 	
 	void modulateSamples(Symbol symbol);
 
 	/* Configuration */
 	Config conf;
-	Timestamp mf_delay_ns;
+	Timestamp filter_delay;
 	float sample_ns;
+	unsigned int mod_rate;
 	float nco_1Hz;
-
-	unsigned int mod_rate;      // GMSK modulator samples per symbols rate
-	unsigned int mod_max_samples;// Maximum number of samples generated from single symbol
+	
+	/* State */
+	State state;
+	SymbolVector symbols;
+	unsigned int symbols_i;
+	SampleVector mod_samples;
+	size_t mod_i;
 
 	/* liquid-dsp and suo objects */
 	modemcf l_mod;
 	nco_crcf l_nco;
 	resamp_crcf l_resamp;     // Rational resampler
 
-	/* State */
-	State state;
-	unsigned framepos;
-	unsigned symph; // Symbol clock phase
-	unsigned pskph; // DPSK phase accumulator
-
-	/* Buffers */
-	Frame frame;
 
 };
 

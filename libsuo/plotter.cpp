@@ -116,7 +116,9 @@ void ComplexPlotter::plot() {
 	}
 
 	figure();
-	matplot::plot(q_data, i_data);
+	hold(on);
+	matplot::plot(q_data);
+	matplot::plot(i_data);
 }
 
 

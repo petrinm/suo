@@ -87,9 +87,7 @@ private:
 	/* State */
 	State state;
 	SymbolVector symbols;     // Symbol buffer
-	int symbol_flags;
-	size_t symbols_i;	      // Symnol buffer index
-	Timestamp start_timestamp;
+	size_t symbols_i;	      // Symbol buffer index
 	SampleVector mod_samples;
 	size_t mod_i;
 

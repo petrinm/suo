@@ -91,7 +91,8 @@ void HDLCFramer::sourceSymbols(SymbolVector& symbols, Timestamp now)
 	Symbol* bit_ptr = &static_cast<Symbol*>(symbols.data())[symbols.size()];
 
 	if (state == GeneratePreamble) {
-
+		symbols.flags |= start_of_burst;
+		
 		/* Make sure there's enough space in the symbol buffer */
 		if (max_symbols < 8 * conf.preamble_length) {
 			if (stuffing_counter++ > 8)

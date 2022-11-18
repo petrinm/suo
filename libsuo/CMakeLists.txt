@@ -11,7 +11,6 @@ add_compile_options(-g -Wall -Wextra)
 add_library(suo SHARED
     suo.cpp
     plotter.cpp
-#    modem/burst_dpsk_receiver.cpp
     modem/demod_fsk_corrbank.cpp
     modem/demod_fsk_mfilt.cpp
 #    modem/demod_fsk_quad.cpp
@@ -20,7 +19,7 @@ add_library(suo SHARED
     modem/demod_psk.cpp
     modem/mod_fsk.cpp
     modem/mod_gmsk.cpp
-#    modem/mod_psk.cpp
+    modem/mod_psk.cpp
 #    coding/convolutional_encoder.cpps
 #    coding/differential.cpp
     coding/golay24.cpp
@@ -31,9 +30,9 @@ add_library(suo SHARED
     framing/golay_framer.cpp
     framing/hdlc_deframer.cpp
     framing/hdlc_framer.cpp
-    framing/syncword_deframer.cpp
-    framing/syncword_framer.cpp
-    framing/tetra_deframer.cpp
+#    framing/syncword_deframer.cpp
+#    framing/syncword_framer.cpp
+#    framing/tetra_deframer.cpp
     framing/utils.cpp
     frame-io/zmq_input.cpp
     frame-io/zmq_output.cpp

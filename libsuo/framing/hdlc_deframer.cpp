@@ -111,8 +111,6 @@ void HDLCDeframer::findStartByte(Symbol bit, Timestamp now) {
 }
 
 
-// 0 1 1 1   1 1 1 0
-
 
 void HDLCDeframer::receivingFrame(Symbol bit, Timestamp now) {
 

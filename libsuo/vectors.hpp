@@ -7,6 +7,7 @@ namespace suo {
 
 enum VectorFlags
 {
+	none = 0,
 	has_timestamp = 1,
 	start_of_burst = 2,
 	end_of_burst = 4,
@@ -37,13 +38,24 @@ class SampleVector : public std::vector<Sample>
 public:
 	Timestamp timestamp;
 	VectorFlags flags;
-};
 
+	void clear() {
+		std::vector<Sample>::clear();
+		flags = none;
+		timestamp = 0;
+	}
+};
 class SymbolVector : public std::vector<Symbol>
 {
 public:
 	Timestamp timestamp;
 	VectorFlags flags;
+	
+	void clear() {
+		std::vector<Symbol>::clear();
+		flags = none;
+		timestamp = 0;
+	}
 };
 
 typedef std::vector<unsigned char> ByteVector;

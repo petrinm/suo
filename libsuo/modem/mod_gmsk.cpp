@@ -95,9 +95,12 @@ void GMSKModulator::reset()
 	state = Idle;
 	symbols.clear();
 	symbols_i = 0;
-	gmskmod_reset(l_mod);
 	mod_i = 0;
 	mod_samples.clear();
+
+	gmskmod_reset(l_mod);
+	nco_crcf_reset(l_nco);
+	resamp_crcf_reset(l_resamp);
 }
 
 
@@ -109,13 +112,14 @@ void GMSKModulator::modulateSamples(Symbol symbol) {
 	// Generate samples from the symbol
 	gmskmod_modulate(l_mod, symbol, mod_output);
 
-	// Mix up the samples
-	nco_crcf_mix_block_up(l_nco, mod_output, mod_output, mod_rate);
-
 	// Interpolate to final sample rate
-	unsigned int num_written = 0;
-	resamp_crcf_execute_block(l_resamp, mod_output, mod_rate, mod_samples.data(), &num_written);
-	mod_samples.resize(num_written);
+	unsigned int resampler_output = 0;
+	resamp_crcf_execute_block(l_resamp, mod_output, mod_rate, mod_samples.data(), &resampler_output);
+
+	// Mix up the samples
+	nco_crcf_mix_block_up(l_nco, mod_samples.data(), mod_samples.data(), resampler_output);
+
+	mod_samples.resize(resampler_output);
 	mod_i = 0;
 }
 
@@ -134,20 +138,16 @@ void GMSKModulator::sourceSamples(SampleVector& samples, Timestamp now)
 
 		// Source new symbols
 		sourceSymbols.emit(symbols, time_end);
-		start_timestamp = 0; //time_end;
 
-		//if (symbols.flags.start_of_burst == false)
-		//	cerr << "warning: start of burst not properly flagged!" << endl;
+		if (symbols.empty() == false) {
 
-		symbols.flags |= VectorFlags::start_of_burst;
+			if ((symbols.flags & has_timestamp))
+				symbols.timestamp -= filter_delay;
 
-#ifdef PRECISE_TIMINGx
-		// Substract filter delays from the 
-		if (start_timestamp > 0)
-			start_timestamp -= filter_delays;
-#endif
+			//if (symbols.flags.start_of_burst == false)
+			//	cerr << "warning: start of burst not properly flagged!" << endl;
+			symbols.flags |= VectorFlags::start_of_burst;
 
-		if (symbols.size() > 0) {
 			state = Waiting;
 			symbols_i = 0;
 		}
@@ -158,31 +158,31 @@ void GMSKModulator::sourceSamples(SampleVector& samples, Timestamp now)
 		 * Waiting for transmitting time
 		 */
 
-		// If start time is defined and in history, rise a warning 
-		if (start_timestamp != 0 && start_timestamp < now) {
-			int64_t late = (int64_t)(now - start_timestamp);
-			if (symbols.flags & VectorFlags::no_late) {
-				cerr << "Warning: TX frame late by " << late << "ns! Discarding it!" << endl;
-				state = Idle;
-				symbols.clear();
+		if ((symbols.flags & has_timestamp)) {
+			// If start time is defined and in history, rise a warning 
+			if (symbols.timestamp < now) {
+				int64_t late = (int64_t)(now - symbols.timestamp);
+				if (symbols.flags & VectorFlags::no_late) {
+					cerr << "Warning: TX frame late by " << late << "ns! Discarding it!" << endl;
+					state = Idle;
+					symbols.clear();
+				}
+				else
+					cerr << "Warning: TX frame late by " << late << "ns" << endl;
 			}
-			else
-				cerr << "Warning: TX frame late by " << late << "ns" << endl;
-		}
 
-		// If start time is in future, don't start sample generation yet
-		if (start_timestamp != 0) {
+			// If start time is in future, don't start sample generation yet
 			const Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity());
-			if (start_timestamp > time_end)
+			if (symbols.timestamp > time_end)
 				return;
 		}
 		
 
 #ifdef PRECISE_TIMING
 		// Generate zero samples for even more precise timing
-		int silence_symbols = (int)floor((double)(now - start_timestamp) / sample_ns);
+		size_t silence_symbols = (size_t)floor((double)(now - symbols.timestamp) / sample_ns);
 		if (silence_symbols > 0 && silence_symbols < samples.capacity()) {
-			for (int i = 0; i < silence_symbols; i++)
+			for (size_t i = 0; i < silence_symbols; i++)
 				*write_ptr++ = 0.0f;
 			left -= silence_symbols;
 		}
@@ -197,7 +197,7 @@ void GMSKModulator::sourceSamples(SampleVector& samples, Timestamp now)
 		state = Transmitting;
 		mod_i = 0;
 		mod_samples.clear();
-		//flags |= SUO_START_OF_BURST;
+		samples.flags |= start_of_burst;
 	
 	}
 
@@ -216,7 +216,8 @@ void GMSKModulator::sourceSamples(SampleVector& samples, Timestamp now)
 					*write_ptr++ = mod_samples[mod_i++];
 				left -= cpy;
 
-				if (left == 0) {
+				// Output buffer full?
+				if (mod_i != mod_samples.size()) {
 					samples.resize(samples.capacity());
 					break;
 				}
@@ -227,7 +228,7 @@ void GMSKModulator::sourceSamples(SampleVector& samples, Timestamp now)
 			modulateSamples(symbols[symbols_i]); 
 
 			// Calculate amplitude ramp up
-			if ((symbols.flags & VectorFlags::start_of_burst) && symbols_i < conf.ramp_up_duration) {
+			if ((symbols.flags & start_of_burst) && symbols_i < conf.ramp_up_duration) {
 				const size_t ramp_duration = conf.ramp_up_duration * mod_rate;
 				const size_t hamming_window_start = symbols_i * mod_rate;
 				const size_t hamming_window_len = 2 * ramp_duration;
@@ -235,21 +236,23 @@ void GMSKModulator::sourceSamples(SampleVector& samples, Timestamp now)
 				for (unsigned int i = 0; i < mod_samples.size(); i++)
 					mod_samples[i] *= hamming(hamming_window_start + i, hamming_window_len); // TODO: liquid_hamming
 			}
+			
 
 			symbols_i++;
 			if (symbols_i > symbols.size()) {
+				bool end_of_burst = (symbols.flags & end_of_burst) != 0;
 				symbols.clear();
 
 				// Try to source new symbols
-				if ((symbols.flags & end_of_burst) == 0) {
+				if (end_of_burst) {
 					Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity());
 					sourceSymbols.emit(symbols, time_end);
-					if (symbols.size() == 0)
+					if (symbols.empty() == true)
 						cerr << "Symbol buffer underrun!" << endl;
 				}
 
 				// End of burst
-				if (symbols.size() == 0) {
+				if (symbols.empty() == true) {
 					state = Trailer;
 					symbols_i = 0;
 					break;
@@ -275,7 +278,7 @@ void GMSKModulator::sourceSamples(SampleVector& samples, Timestamp now)
 					*write_ptr++ = mod_samples[mod_i++];
 				left -= cpy;
 
-				if (left == 0) {
+				if (mod_i != mod_samples.size()) {
 					samples.resize(samples.capacity());
 					break;
 				}

@@ -79,11 +79,9 @@ private:
 
 	/* State */
 	enum State state;
-	size_t symbols_i;
 	SymbolVector symbols;
-	int symbol_flags;
-	Timestamp start_timestamp;
-	std::vector<Complex> mod_samples;
+	size_t symbols_i;
+	SampleVector mod_samples;
 	unsigned int mod_i;
 
 	/* liquid-dsp objects */

@@ -61,6 +61,7 @@ void GolayFramer::sourceSymbols(SymbolVector& symbols, Timestamp t)
 		throw SuoError("Too small buffer! Symbols to generate %d, buffer size %d", syms, max_symbols);
 
 	symbols.resize(syms);
+	symbols.flags = start_of_burst | end_of_burst;
 
 	/* Generate preamble sequence */
 	Symbol *bit_ptr = symbols.data();
