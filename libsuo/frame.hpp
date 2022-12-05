@@ -27,14 +27,16 @@ public:
 		METATYPE_TIME = 5,
 	};
 
-
 	Metadata();
-	void serialize();
-	void deserialize();
 
-	std::string name;
+	const std::string& name() const { return _name; }
+	int value() const { return 0; }
 
 private:
+
+	MetadataTypeType _type;
+	std::string _name;
+
 	// Union for the actual data
 	union {
 		int32_t     v_int;
@@ -43,7 +45,7 @@ private:
 		double      v_double;
 		Timestamp   v_time;
 		uint8_t     raw[16];
-	} value;
+	} _value;
 };
 
 

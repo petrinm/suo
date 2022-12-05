@@ -52,9 +52,6 @@ FSKMatchedFilterDemodulator::FSKMatchedFilterDemodulator(const Config& conf) :
 
 	double bw = 0.4 * resamprate / conf.samples_per_symbol;
 	int semilen = lroundf(1.0f / bw);
-	cerr << "resamprate: " << resamprate << endl;
-	cerr << "bw: " << bw << endl;
-	cerr << "semilen: " << semilen << endl;
 	l_resamp = resamp_crcf_create(resamprate, semilen, bw, 60.0f, 16);
 
 	// TODO: 
@@ -96,10 +93,10 @@ FSKMatchedFilterDemodulator::FSKMatchedFilterDemodulator(const Config& conf) :
 
 		for (Symbol symbol_a = 0; symbol_a < constellation_size; symbol_a++)
 		for (Symbol symbol_c = 0; symbol_c < constellation_size; symbol_c++) {
-			cout << endl << "### " << (int)symbol_a << " " << (int)symbol_b << " " << (int)symbol_c << endl;
+			//cout << endl << "### " << (int)symbol_a << " " << (int)symbol_b << " " << (int)symbol_c << endl;
 
 			cpfskmod_reset(mod);
-#if 1
+
 			cpfskmod_modulate(mod, symbol_a, &mod_output[0 * conf.samples_per_symbol]);
 			cpfskmod_modulate(mod, symbol_a, &mod_output[0 * conf.samples_per_symbol]);
 			cpfskmod_modulate(mod, symbol_a, &mod_output[0 * conf.samples_per_symbol]);
@@ -108,29 +105,18 @@ FSKMatchedFilterDemodulator::FSKMatchedFilterDemodulator(const Config& conf) :
 			cpfskmod_modulate(mod, symbol_c, &mod_output[1 * conf.samples_per_symbol]);
 			cpfskmod_modulate(mod, symbol_c, &mod_output[2 * conf.samples_per_symbol]);
 			cpfskmod_modulate(mod, symbol_c, &mod_output[3 * conf.samples_per_symbol]);
-#else
-			cpfskmod_modulate(mod, symbol_b, &mod_output[0 * conf.samples_per_symbol]);
-			cpfskmod_modulate(mod, symbol_b, &mod_output[0 * conf.samples_per_symbol]);
-			cpfskmod_modulate(mod, symbol_b, &mod_output[0 * conf.samples_per_symbol]);
-			cpfskmod_modulate(mod, symbol_b, &mod_output[0 * conf.samples_per_symbol]);
-			cpfskmod_modulate(mod, symbol_b, &mod_output[1 * conf.samples_per_symbol]);
-			cpfskmod_modulate(mod, symbol_b, &mod_output[2 * conf.samples_per_symbol]);
-			cpfskmod_modulate(mod, symbol_b, &mod_output[3 * conf.samples_per_symbol]);
-#endif
+
 			for (size_t j = 0; j < xxxx; j++)
 				matched_filter[j] += mod_output[j];
 
 		}
-/*
-	demodr = (power1 - power0) / (power1 + power0);
-	demodr = ((1.f * power1) + (-1.f * power0)) / (power1 + power0);
-*/
+
 		for (size_t j = 0; j < xxxx; j++)
 			matched_filter[j] *= hamming(j, xxxx) / 2 * constellation_size; // TODO: liquid_hamming
 
 		matched_filters.push_back(firfilt_cccf_create(&matched_filter[conf.samples_per_symbol /*+ filter_delay*/], conf.samples_per_symbol));
 
-#if 1
+#if 0
 		std::vector<double> plot_i(xxxx);
 		std::vector<double> plot_q(xxxx);
 		for (size_t j = 0; j < xxxx; j++) {
@@ -142,9 +128,11 @@ FSKMatchedFilterDemodulator::FSKMatchedFilterDemodulator(const Config& conf) :
 		matplot::plot(plot_i);
 		matplot::plot(plot_q);
 		//matplot::title(format("Symbol %d", s));
-#endif
 	}
 	matplot::show();
+#else
+	}
+#endif
 
 	l_eqfir = firfilt_rrrf_create((float*)(const float[5]){ -.5f, 0, 2.f, 0, -.5f }, 5);
 
@@ -177,6 +165,8 @@ void FSKMatchedFilterDemodulator::reset() {
 	receiver_lock = false;
 	conf.frequency_offset = 0;
 	update_nco();
+	firfilt_rrrf_reset(l_eqfir);
+	symsync_rrrf_reset(l_symsync);
 }
 
 
@@ -384,12 +374,12 @@ void FSKMatchedFilterDemodulator::sinkSamples(const SampleVector& samples, Times
 void FSKMatchedFilterDemodulator::lockReceiver(bool locked, Timestamp now) {
 	if (locked) {
 		receiver_lock = true;
-		agc_crcf_lock(l_bg_agc);
+		//agc_crcf_lock(l_bg_agc);
 		nco_crcf_pll_set_bandwidth(l_nco, nco_1Hz * conf.pll_bandwidth1 / conf.samples_per_symbol);
 	}
 	else {
 		receiver_lock = false;
-		agc_crcf_lock(l_bg_agc);
+		//agc_crcf_lock(l_bg_agc);
 		nco_crcf_pll_set_bandwidth(l_nco, nco_1Hz / conf.pll_bandwidth0 / conf.samples_per_symbol);
 	}
 }

@@ -29,8 +29,8 @@ FSKModulator::FSKModulator(const Config& _conf) :
 	mod_rate = (unsigned int)samples_per_symbol + 1;
 	const float resamp_rate = samples_per_symbol / (float)mod_rate;
 
-	symbols.reserve(4 * 256);
-
+	symbols.resize(8 * 256);
+	symbols.clear();
 
 	if (conf.modindex < 0)
 		throw SuoError("FSKModulator: Negative modindex! %f", conf.modindex);
@@ -125,7 +125,7 @@ void FSKModulator::modulateSamples(Symbol symbol) {
 }
 
 
-void FSKModulator::sourceSamples(SampleVector samples, Timestamp now)
+void FSKModulator::sourceSamples(SampleVector& samples, Timestamp now)
 {
 	Sample* write_ptr = samples.data();
 	size_t left = samples.capacity();
@@ -138,13 +138,13 @@ void FSKModulator::sourceSamples(SampleVector samples, Timestamp now)
 		const Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity());
 		sourceSymbols.emit(symbols, time_end);
 
-		if (symbols.empty() == false) {
-			symbols.flags |= VectorFlags::start_of_burst;
-			state = Waiting;
-			symbols_i = 0;
-		}
+		if (symbols.empty())
+			return;
 
-		return;
+
+		symbols.flags |= VectorFlags::start_of_burst;
+		state = Waiting;
+		symbols_i = 0;
 	}
 
 	if (state == Waiting) {
@@ -170,7 +170,7 @@ void FSKModulator::sourceSamples(SampleVector samples, Timestamp now)
 			if (symbols.timestamp > time_end)
 				return;
 		}
-		
+
 		nco_crcf_reset(l_nco);
 		nco_crcf_set_frequency(l_nco, nco_1Hz * (conf.center_frequency + conf.frequency_offset));
 		state = Transmitting;
@@ -190,10 +190,11 @@ void FSKModulator::sourceSamples(SampleVector samples, Timestamp now)
 				for (size_t i = 0; i < cpy; i++)
 					*write_ptr++ = mod_samples[mod_i++];
 				left -= cpy;
-
-				if (mod_i != mod_samples.size()) {
+				
+				if (left == 0) {
+					cout << "FULL" << endl;
 					samples.resize(samples.capacity());
-					break;;
+					break;
 				}
 			}
 

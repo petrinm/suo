@@ -217,7 +217,7 @@ void GMSKModulator::sourceSamples(SampleVector& samples, Timestamp now)
 				left -= cpy;
 
 				// Output buffer full?
-				if (mod_i != mod_samples.size()) {
+				if (left == 0) {
 					samples.resize(samples.capacity());
 					break;
 				}

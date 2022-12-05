@@ -36,8 +36,18 @@ constexpr VectorFlags operator~(VectorFlags a) noexcept {
 class SampleVector : public std::vector<Sample>
 {
 public:
+	using vector::vector; // Inherit std::vector constructors
+
 	Timestamp timestamp;
 	VectorFlags flags;
+
+	size_t left() const {
+		return capacity() - size();
+	}
+
+	bool full() {
+		return capacity() == size();
+	}
 
 	void clear() {
 		std::vector<Sample>::clear();
@@ -45,17 +55,30 @@ public:
 		timestamp = 0;
 	}
 };
+
 class SymbolVector : public std::vector<Symbol>
 {
 public:
+	using vector::vector; // Inherit std::vector constructors
+
 	Timestamp timestamp;
 	VectorFlags flags;
+
+	size_t left() const {
+		return capacity() - size();
+	}
+
+	bool full() {
+		return capacity() == size();
+	}
 	
 	void clear() {
 		std::vector<Symbol>::clear();
 		flags = none;
 		timestamp = 0;
 	}
+
+
 };
 
 typedef std::vector<unsigned char> ByteVector;

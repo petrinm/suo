@@ -29,7 +29,7 @@ uint16_t suo::crc16_ccitt(const uint8_t* data_p, size_t length)
 
 
 HDLCDeframer::Config::Config() {
-	mode = 1;
+	mode = G3RUH;
 	minimum_frame_length = 6;
 	maximum_frame_length = 128;
 	minimum_silence = 6 * 8;
@@ -46,7 +46,6 @@ HDLCDeframer::HDLCDeframer(const Config& conf) :
 	if (conf.minimum_frame_length > conf.maximum_frame_length)
 		throw SuoError("HDLCDeframer: minimum_frame_length > conf.maximum_frame_length");
 
-	//frame = std::make_shared<Frame>(1024);
 	reset();
 }
 
@@ -62,11 +61,11 @@ void HDLCDeframer::reset()
 
 Symbol HDLCDeframer::descramble_bit(Symbol bit)
 {
-	if (conf.mode == 0) {
+	if (conf.mode == G3RUH) {
 		/* G3RUH descrambler */
 		unsigned int lfsr_hi = (scrambler & 1);
 		unsigned int lfsr_lo = ((scrambler >> 5) & 1);
-		unsigned int descrambled_bit = bit ^ (lfsr_hi ^ lfsr_lo);
+		unsigned int descrambled_bit = (bit ^ (lfsr_hi ^ lfsr_lo)) != 0;
 
 		scrambler = (scrambler >> 1);
 
@@ -74,30 +73,25 @@ Symbol HDLCDeframer::descramble_bit(Symbol bit)
 			scrambler |= 0x00010000;
 
 		bit = descrambled_bit;
-	}
 
-	if (conf.mode == 0) {
-		/* NRZ decode aka no differential coding */
-	}
-	else if (conf.mode == 0) {
 		/* NRZI decode */
-		Symbol new_bit = (bit != last_bit) ? 1 : 0;
+		Symbol new_bit = (bit != last_bit) ? 0 : 1;
 		last_bit = bit;
-		bit = new_bit;
+		return new_bit;
 	}
+	else 
+		return bit;
 
-	return bit;
 }
 
+void HDLCDeframer::findStartFlag(Symbol bit, Timestamp now) {
 
-void HDLCDeframer::findStartByte(Symbol bit, Timestamp now) {
-
-	if (stuffing_counter >= 5) {
-		// More than 5 continious 1's have been received.
-
+	// More than 5 continious 1's have been received.
+	if (stuffing_counter == 6 && bit == 0) { 
 		// Start/end flag!
 		syncDetected.emit(true, now);
 
+		state = ReceivingFrame;
 		frame.clear();
 		shift = 0;
 		stuffing_counter = 0;
@@ -111,18 +105,18 @@ void HDLCDeframer::findStartByte(Symbol bit, Timestamp now) {
 }
 
 
-
 void HDLCDeframer::receivingFrame(Symbol bit, Timestamp now) {
 
 	if (stuffing_counter >= 5) {
 		// More than 5 continious 1's have been received.
 
-		if (bit) {
+		if (bit == 1) {
 			// 6th 1 breaks the stuffing rule. End flag detected! 
 
 			if (frame.data.size() < conf.minimum_frame_length) {
-				// Multiple start flags
+				// Repeated start flags
 				bit_idx = 0;
+				shift = 0;
 				frame.data.clear();
 				return;
 			}
@@ -150,6 +144,7 @@ void HDLCDeframer::receivingFrame(Symbol bit, Timestamp now) {
 			return;	
 		}
 		else {
+			// More than 6 ones!
 			// Unstuff the stuffing bit
 			stuffing_counter = 0;
 		}
@@ -162,8 +157,10 @@ void HDLCDeframer::receivingFrame(Symbol bit, Timestamp now) {
 		shift = (0xFF & (shift << 1)) | bit;
 		bit_idx++;
 
-		if (bit_idx < 8) {
+		if (bit_idx >= 8) {
 			frame.data.push_back(shift);
+			bit_idx = 0;
+			shift = 0;
 
 			// Too long frame
 			if (frame.data.size() > conf.maximum_frame_length) {
@@ -191,7 +188,6 @@ void HDLCDeframer::receivingTrailer(Symbol bit, Timestamp now) {
 	silence_counter++;
 
 	if (silence_counter >= conf.minimum_silence) {
-		syncDetected.emit(false, now);
 		state = WaitingSync;
 	}
 
@@ -205,7 +201,7 @@ void HDLCDeframer::sinkSymbol(Symbol bit, Timestamp now)
 	switch (state)
 	{
 	case WaitingSync:
-		findStartByte(bit, now);
+		findStartFlag(bit, now);
 		break;
 	case ReceivingFrame:
 		receivingFrame(bit, now);

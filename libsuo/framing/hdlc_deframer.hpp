@@ -11,6 +11,12 @@ namespace suo
  */
 extern uint16_t crc16_ccitt(const uint8_t* data_p, size_t length);
 
+enum HDLCMode {
+	Plain,
+	G3RUH,
+};
+
+
 /*
  */
 class HDLCDeframer : public Block
@@ -28,7 +34,7 @@ public:
 		Config();
 
 		/* NRZ, NRZ-I, G3RUH */
-		unsigned int mode;
+		HDLCMode mode;
 
 		/* Minimum frame length to filter false positive frames. */
 		unsigned int minimum_frame_length;
@@ -54,7 +60,7 @@ public:
 
 private:
 	Symbol descramble_bit(Symbol bit);
-	void findStartByte(Symbol bit, Timestamp now);
+	void findStartFlag(Symbol bit, Timestamp now);
 	void receivingFrame(Symbol bit, Timestamp now);
 	void receivingTrailer(Symbol bit, Timestamp now);
 

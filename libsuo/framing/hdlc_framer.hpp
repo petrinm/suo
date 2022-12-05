@@ -2,6 +2,7 @@
 
 #include <memory>
 #include "suo.hpp"
+#include "framing/hdlc_deframer.hpp"
 
 namespace suo
 {
@@ -16,11 +17,6 @@ public:
 		GeneratePreamble,
 		GenerateData,
 		GenerateTrailer,
-	};
-
-	enum HDLCMode {
-		Plain,
-		G3RUH,
 	};
 
 	struct Config {

@@ -57,7 +57,7 @@ public:
 
 	void reset();
 
-	void sourceSamples(SampleVector samples, Timestamp timestamp);
+	void sourceSamples(SampleVector& samples, Timestamp timestamp);
 	
 	Port<SymbolVector&, Timestamp> sourceSymbols;
 	

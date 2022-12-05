@@ -10,6 +10,7 @@ add_compile_options(-g -Wall -Wextra)
 # Setup building of the library
 add_library(suo SHARED
     suo.cpp
+    frame.cpp
     plotter.cpp
     modem/demod_fsk_corrbank.cpp
     modem/demod_fsk_mfilt.cpp
