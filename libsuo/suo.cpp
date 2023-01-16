@@ -6,6 +6,8 @@
 #include <iomanip>
 #include <ctime>
 #include <cstdarg> // va_start, va_end
+#include <sys/time.h>
+
 
 
 using namespace suo;
@@ -42,6 +44,14 @@ std::ostream& suo::operator<<(std::ostream& stream, const SymbolVector& v) {
 	return stream;
 }
 
+std::ostream& suo::operator<<(std::ostream& _stream, const ByteVector& v) {
+	std::ostream stream(_stream.rdbuf());
+	stream <<  hex << right << setfill('0');
+	for (const auto& c : v)
+		stream << setw(2) << (int)c << " ";
+	return _stream;
+}
+
 
 void Block::sinkFrame(const Frame& frame) { }
 void Block::sourceFrame(Frame& frame) { }
@@ -65,3 +75,21 @@ Timestamp get_time() {
 	return 1000000 * ts.tv_sec + ts.tv_nsec;
 }
 
+
+string suo::getISOCurrentTimestamp()
+{
+#if 1
+	timeval curTime;
+	gettimeofday(&curTime, NULL);
+
+	int milli = curTime.tv_usec / 1000;
+	char buf[64];
+	char* p = buf + strftime(buf, sizeof buf, "%FT%T", gmtime(&curTime.tv_sec));
+	sprintf(p, ".%dZ", milli);
+
+	return buf;
+#else
+	auto now = chrono::system_clock::now();
+	return std::format("{:%FT%TZ}", now);
+#endif
+}
