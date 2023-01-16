@@ -63,12 +63,19 @@ find_package(CPPZMQ REQUIRED)
 target_include_directories(suo PUBLIC ${CPPZMQ_INCLUDE_DIRS})
 target_link_libraries(suo PUBLIC ${CPPZMQ_LIBRARIES})
 
+# Setup AMQPCPP
+find_package(AMQPCPP)
+if (AMQPCPP_FOUND)
+    target_include_directories(suo PUBLIC ${AMQPCPP_INCLUDE_DIRS})
+    target_link_libraries(suo PUBLIC ${AMQPCPP_LIBRARIES})
+    target_compile_definitions(suo PUBLIC SUO_SUPPORT_AMQP)
+endif()
+
 # Find Matplot++
 find_package(Matplot++)
 if (Matplot++_FOUND)
     target_include_directories(suo PRIVATE ${Matplot++_INCLUDE_DIRS})
-    target_link_libraries(suo PUBLIC ${Matplot++_LIBRARIES})
-    target_link_libraries(suo PUBLIC matplot) # Hack...
+    target_link_libraries(suo PUBLIC Matplot++::matplot)
     target_compile_definitions(suo PUBLIC SUO_SUPPORT_PLOTTING)
 endif()
 
