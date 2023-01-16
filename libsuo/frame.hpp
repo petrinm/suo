@@ -2,53 +2,16 @@
 
 #include <string>
 #include <vector>
+#include <variant>
 #include <map>
 
 #include "base_types.hpp"
 
-
 namespace suo {
 
 
-
-/* Metadata struct */
-class Metadata
-{
-public:
-
-	/* Metadata types */
-	enum MetadataTypeType
-	{
-		METATYPE_RAW = 0,
-		METATYPE_FLOAT = 1,
-		METATYPE_DOUBLE = 2,
-		METATYPE_INT = 3,
-		METATYPE_UINT = 4,
-		METATYPE_TIME = 5,
-	};
-
-	Metadata();
-
-	const std::string& name() const { return _name; }
-	int value() const { return 0; }
-
-private:
-
-	MetadataTypeType _type;
-	std::string _name;
-
-	// Union for the actual data
-	union {
-		int32_t     v_int;
-		uint32_t    v_uint;
-		float       v_float;
-		double      v_double;
-		Timestamp   v_time;
-		uint8_t     raw[16];
-	} _value;
-};
-
-
+typedef std::variant<int, unsigned int, float, double, Timestamp, std::string> MetadataValue;
+typedef std::pair<std::string, MetadataValue> Metadata;
 
 /*
  * Frame together with metadata
@@ -61,6 +24,7 @@ public:
 		none,
 		has_timestamp = 1,
 		no_late = 2,
+		control_frame = 4,
 	};
 
 	enum FormattingFlags : int
@@ -86,12 +50,10 @@ public:
 
 	void clear();
 
-
-	void setMetadata(std::string field_name, int val);
-	void setMetadata(std::string field_name, unsigned int val);
-	void setMetadata(std::string field_name, float val);
-	void setMetadata(std::string field_name, double val);
-	void setMetadata(std::string field_name, Timestamp val);
+	template<typename T>
+	void setMetadata(std::string field_name, T val) {
+		metadata[field_name] = val;
+	}
 
 	Byte operator[](size_t _n) { return data[_n]; }
 	Byte operator[](size_t _n) const { return data[_n]; }
@@ -108,15 +70,49 @@ public:
 
 
 	/* Metadata vector  */
-	std::vector<Metadata> metadata;
+	std::map<std::string, MetadataValue> metadata;
 
 	/* Actual data (can be bytes, bits or softbits)*/
 	ByteVector data;
 
 	Printer operator()(FormattingFlags flags) const { return { *this, flags }; }
 
+	//static SymbolGenerator generateSymbols(Frame& frame);
+
+	static Frame deserialize_from_json(const std::string& json_string);
+	std::string serialize_to_json() const;
+
 };
 
+
+constexpr Frame::Flags operator|(Frame::Flags a, Frame::Flags b) noexcept {
+	return static_cast<Frame::Flags>(static_cast<int>(a) | static_cast<int>(b));
+}
+
+inline Frame::Flags& operator|=(Frame::Flags& a, Frame::Flags b) noexcept {
+	a = static_cast<Frame::Flags>(static_cast<int>(a) | static_cast<int>(b));
+	return a;
+}
+
+constexpr Frame::Flags operator&(Frame::Flags a, Frame::Flags b) noexcept {
+	return static_cast<Frame::Flags>(static_cast<int>(a) & static_cast<int>(b));
+}
+
+//constexpr  operator bool(Frame::Flags a) noexcept {
+//	return static_cast<int>(a) != 0;
+//}
+
+inline Frame::Flags& operator&=(Frame::Flags& a, Frame::Flags b) noexcept {
+	a = static_cast<Frame::Flags>(static_cast<int>(a) & static_cast<int>(b));
+	return a;
+}
+
+constexpr Frame::Flags operator~(Frame::Flags a) noexcept {
+	return static_cast<Frame::Flags>(~static_cast<int>(a));
+}
+
+
+std::ostream& operator<<(std::ostream& stream, const Metadata& metadata);
 
 std::ostream& operator<<(std::ostream& stream, const Frame& frame);
 std::ostream& operator<<(std::ostream& stream, const Frame::Printer& printer);
