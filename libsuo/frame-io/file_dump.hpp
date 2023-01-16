@@ -14,10 +14,11 @@ class FileDump {
 public:
 
 	enum DumpFormat {
-		FormatRaw,
-		FormatKISS,
-		FormatASCII,
-		FormatASCIIHex,
+		FileFormatRaw,
+		FileFormatKISS,
+		FileFormatASCII,
+		FileFormatASCIIHex,
+		FileFormatJSON,
 	};
 
 	struct Config {
@@ -37,6 +38,7 @@ public:
 private:
 	Config conf;
 	std::ofstream output;
+	bool first_row;
 };
 
 }; // namespace suo

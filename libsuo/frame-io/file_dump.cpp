@@ -10,11 +10,12 @@ using namespace suo;
 using namespace std;
 
 FileDump::Config::Config() :
-	format(FormatASCII)
+	format(FileFormatASCII)
 {}
 
 FileDump::FileDump(const Config& _conf) :
-	conf(_conf)
+	conf(_conf),
+	first_row(true)
 {
 	if (conf.filename.empty() == false)
 		open(conf.filename);
@@ -23,21 +24,30 @@ FileDump::FileDump(const Config& _conf) :
 
 void FileDump::open(const std::string& filename) {
 
-	if (output.is_open())
+	if (output.is_open()) // && file not stdout 
 		output.close();
 
+	if (filename == "-") {
+		throw SuoError("File output to stdout is not supported yet!");
+	}
+
 	ios_base::openmode flags = ios::out | ios::app;
-	if (conf.format == FormatRaw || conf.format == FormatKISS)
+	if (conf.format == FileFormatRaw || conf.format == FileFormatKISS)
 		flags |= ios::binary;
 
 	output.open(filename, flags);
+	
 	if (output.is_open() == false)
 		throw SuoError("FileDump: Failed to open output file %s", filename.c_str());
 
+	first_row = true;
 }
 
 
 void FileDump::close() {
+
+	if (conf.format == FileFormatJSON)
+		output << "]\n";
 	output.close();
 }
 
@@ -50,19 +60,20 @@ void FileDump::sinkFrame(const Frame& frame, Timestamp timestamp) {
 		throw SuoError("FileDump: No output stream opened!");
 
 	switch (conf.format) {
-	case FormatRaw: {
+	case FileFormatRaw: {
 		/* Output as raw binary to file */
 		output.write(reinterpret_cast<const char*>(frame.raw_ptr()), frame.size());
 		break;
 	}
-	case FormatKISS: {
+	case FileFormatKISS: {
 		/* Output as raw binary using KISS framing */
 		const uint8_t FEND = 0xC0; // Frame End
 		const uint8_t FESC = 0xDB; // Frame Escape
 		const uint8_t TFEND = 0xDC; // Transposed Frame End
 		const uint8_t TFESC = 0xDD; // Transposed Frame Escape
+		const uint8_t CMD = 0x00;
 
-		output << FEND << 0;
+		output << FEND << CMD;
 		for (Byte b: frame.data) {
 			if (b == FEND)
 				output << FESC << TFEND;
@@ -75,18 +86,30 @@ void FileDump::sinkFrame(const Frame& frame, Timestamp timestamp) {
 
 		break;
 	}
-	case FormatASCII: {
+	case FileFormatASCII: {
 		/* Print frame using Suo's verbose ASCII formatting. */
 		output << frame(Frame::PrintData | Frame::PrintMetadata);
 		break;
 	}
-	case FormatASCIIHex: {
+	case FileFormatASCIIHex: {
 		/* Print frame data as hexadecimal string to file. */
-		output << hex << right << setfill('0');
+		output << hex << right << setw(2) << setfill('0');
 		for (unsigned int i = 0; i < frame.data.size(); i++) {
-			output << setw(2) << (int)frame.data[i];
+			output << (int)frame.data[i];
 		}
 		output << endl;
+		output.flush();
+		break;
+	}
+	case FileFormatJSON: {
+		/* Prinf frame as JSON dict */
+		if (first_row) {
+			output << "[\n";
+			first_row = false;
+		}
+		else
+			output << ",\n";
+		output << frame.serialize_to_json();
 		output.flush();
 		break;
 	}
@@ -94,24 +117,3 @@ void FileDump::sinkFrame(const Frame& frame, Timestamp timestamp) {
 		throw SuoError("FileDump: Invalid output format %d", conf.format);
 	}
 }
-
-
-#if 0
-
-void* file_frame_output_init(const void* conf_v) {
-	struct file_frame_dump* self = calloc(1, sizeof(struct file_frame_dump));
-	self->c = *(struct file_frame_output_conf*)conf_v;
-
-	if (strcmp(self->c.filename, "-") == 0)
-		self->stream = stdout;
-	else if (strcmp(self->c.filename, "-") == 0)
-		self->stream = stderr;
-	else
-		self->stream = fopen(self->c.filename, "a");
-
-	if (self->stream == NULL)
-		fprintf(stderr, "Failed to open frame output file '%s'", self->c.filename);
-
-}
-
-#endif
