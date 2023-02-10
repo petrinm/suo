@@ -133,6 +133,24 @@ const CRCAlgorithm CRC24_BLE = {
 	.xorOut = 0xFFFF,
 };
 
+const CRCAlgorithm CRC16_MODBUS = {
+	.width = 16,
+	.poly = 0x8005,
+	.init = 0xFFFF,
+	.refIn = true,
+	.refOut = true,
+	.xorOut = 0x0000,
+};
+
+const CRCAlgorithm CRC16_CMS = {
+	.width = 16,
+	.poly = 0x8005,
+	.init = 0xFFFF,
+	.refIn = false,
+	.refOut = false,
+	.xorOut = 0x0000,
+};
+
 const CRCAlgorithm CRC32 = {
 	.width = 32,
 	.poly = 0x04C11DB7,
@@ -153,7 +171,7 @@ const CRCAlgorithm CRC32_POSIX = {
 
 
 using namespace std::literals::string_view_literals;
-constexpr std::array<std::pair<std::string_view, const CRCAlgorithm&>, 10> algorithms{ {
+constexpr std::array<std::pair<std::string_view, const CRCAlgorithm&>, 12> algorithms{ {
 	{ "CRC-8"sv, CRC8 },
 	{ "CRC-8/CDMA2000"sv, CRC8_CDMA2000 },
 	{ "CRC-8/DVB-S2"sv, CRC8_DVB_S2 },
@@ -163,6 +181,8 @@ constexpr std::array<std::pair<std::string_view, const CRCAlgorithm&>, 10> algor
 	{ "CRC-16/CCITT_FALSE"sv, CRC16_CCITT_FALSE },
 	{ "CRC-16/CDMA2000"sv, CRC16_CDMA2000 },
 	{ "CRC-16/X25"sv, CRC16_X25 },
+	{ "CRC-16/MODBUS"sv, CRC16_MODBUS },
+	{ "CRC-16/CMS"sv, CRC16_CMS },
 
 	{ "CRC-32"sv, CRC32 },
 	{ "CRC-32/POSIX"sv, CRC32_POSIX },

@@ -41,6 +41,8 @@ extern const CRCAlgorithm CRC16_AUG_CCITT;
 extern const CRCAlgorithm CRC16_CCITT_FALSE;
 extern const CRCAlgorithm CRC16_CDMA2000;
 extern const CRCAlgorithm CRC16_X25;
+extern const CRCAlgorithm CRC16_MODBUS;
+extern const CRCAlgorithm CRC16_CMS;
 
 extern const CRCAlgorithm CRC24_BLE;
 
