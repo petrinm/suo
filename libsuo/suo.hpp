@@ -73,3 +73,4 @@ std::string getISOCurrentTimestamp();
 
 }; // namespace suo
 
+#include "generators.hpp"

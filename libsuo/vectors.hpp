@@ -1,6 +1,6 @@
 #pragma once
 
-#include "suo.hpp"
+#include "base_types.hpp"
 #include <cassert>
 
 namespace suo {
@@ -83,10 +83,11 @@ public:
 
 typedef std::vector<unsigned char> ByteVector;
 
+
 std::ostream& operator<<(std::ostream& stream, const SampleVector& v);
 std::ostream& operator<<(std::ostream& stream, const SymbolVector& v);
 
-//std::ostream& suo::operator<<(std::ostream& _stream, const BitVector& v);
-//std::ostream& suo::operator<<(std::ostream& _stream, const ByteVector& v);
+//std::ostream& operator<<(std::ostream& _stream, const BitVector& v);
+std::ostream& operator<<(std::ostream& _stream, const ByteVector& v);
 
 }; // namespace suo
