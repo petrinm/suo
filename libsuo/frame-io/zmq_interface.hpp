@@ -34,10 +34,15 @@ struct ZMQBinaryMetadata
 #pragma pack(pop)
 
 
+enum ZMQMessageFormat {
+	RawBinary,
+	StructuredBinary,
+	JSON,
+};
 
 /*
  */
-class ZMQOutput: public Block
+class ZMQPublisher: public Block
 {
 public:
 
@@ -45,94 +50,72 @@ public:
 	struct Config {
 		Config();
 
-		/* Address for connecting or binding to transfer frame */
-		std::string address;
+		/* Address which frame transmit socket will bind to.
+		 * (Either bind or connected address should be provided!) */
+		std::string bind;
 
-		/* Address for connecting or binding to transfer ticks */
-		std::string address_tick;
+		/* Address which frame transmit socket will connect to.
+		 * (Either bind or connected address should be provided!) */
+		std::string connect;
 
-		/* Connection flags */
-		bool binding;
-		bool binding_ticks;
-		bool thread;
+		/* Messaging format used over the socket */
+		enum ZMQMessageFormat msg_format;
+
 	};
 
-	ZMQOutput(const Config& conf = Config());
-	~ZMQOutput();
+	explicit ZMQPublisher(const Config& conf = Config());
+	~ZMQPublisher();
 
-
+	/* */
 	void sinkFrame(const Frame& frame, Timestamp timestamp);
 
-	/* Send a timing */
-	void tick(unsigned int flags, Timestamp now);
+	/* Send a timing message */
+	void tick(Timestamp now);
 
 private:
 	Config conf;
-
-	/* Decoder thread */
-	volatile bool decoder_running;
-	pthread_t decoder_thread;
-
-	/* ZeroMQ sockets */
-	zmq::socket_t z_rx_pub; /* Publish decoded frames */
-	zmq::socket_t z_tick_pub; /* Publish ticks */
-	zmq::socket_t z_decw; 
-	zmq::socket_t z_decr; /* Receiver-to-decoder queue */
-
-	/* Callbacks */
-	//const struct decoder_code* decoder;
-
+	zmq::socket_t zmq_socket;
 };
 
 
-
-/*
- */
-class ZMQInput : public Block
+class ZMQSubscriber: public Block
 {
 public:
 
-	/* ZMQ frame input configuration */
+	/* ZMQ frame output configuration */
 	struct Config {
 		Config();
 
-		/* Address for connecting or binding to transfer frame */
-		std::string address;
+		/* Address which frame transmit socket will bind to.
+		 * (Either bind or connected address should be provided!) */
+		std::string bind;
 
-		/* Address for connecting or binding to transfer ticks */
-		std::string address_tick;
+		/* Address which frame transmit socket will connect to.
+		 * (Either bind or connected address should be provided!) */
+		std::string connect;
 
-		/* Connection flags */
-		bool binding;
-		bool binding_ticks;
-		bool thread;
+		/* Messaging format used over the socket */
+		enum ZMQMessageFormat msg_format;
+
+		/* */
+		std::string subscribe;
 	};
 
-	ZMQInput(const Config& args = Config());
-	~ZMQInput();
+	explicit ZMQSubscriber(const Config& conf = Config());
+	~ZMQSubscriber();
 
+	/* */
 	void reset();
 
+	/* */
 	void sourceFrame(Frame& frame, Timestamp now);
 
-	void tick(unsigned int flags, Timestamp now);
 
 private:
-
-	/* Configuration */
 	Config conf;
-
-	/* Encoder thread */
-	bool encoder_running;
-	pthread_t encoder_thread;
-
-	/* ZeroMQ sockets */
-	zmq::socket_t z_tx_sub; /* Subscribe frames to be encoded */
-	zmq::socket_t z_tick_pub; /* Publish ticks */
-	zmq::socket_t z_txbuf_w;
-	zmq::socket_t z_txbuf_r; /* Encoded-to-transmitter queue */
-
+	zmq::socket_t zmq_socket;
 };
+
 
 
 /*
@@ -145,6 +128,7 @@ private:
  *   <0 on error
  */
 void suo_zmq_send_frame(zmq::socket_t& sock, const Frame& frame, zmq::send_flags flags);
+void suo_zmq_send_frame_raw(zmq::socket_t& sock, const Frame& frame, zmq::send_flags flags);
 void suo_zmq_send_frame_json(zmq::socket_t& sock, const Frame& frame, zmq::send_flags flags);
 
 /*
@@ -158,6 +142,7 @@ void suo_zmq_send_frame_json(zmq::socket_t& sock, const Frame& frame, zmq::send_
  *   <0 on error
  */
 int suo_zmq_recv_frame(zmq::socket_t& sock, Frame& frame, zmq::recv_flags flags);
+int suo_zmq_recv_frame_raw(zmq::socket_t& sock, Frame& frame, zmq::recv_flags flags);
 int suo_zmq_recv_frame_json(zmq::socket_t& sock, Frame& frame, zmq::recv_flags flags);
 
 }; // namespace suo

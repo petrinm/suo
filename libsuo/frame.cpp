@@ -37,7 +37,7 @@ void Frame::clear()
 
 
 std::ostream& suo::operator<<(std::ostream& stream, const Metadata& metadata) {
-	stream << metadata.first << "=";
+	stream << metadata.first << " = ";
 	std::visit([&](auto const& a) { stream << a; }, metadata.second);
 	return stream;
 }
@@ -77,7 +77,7 @@ std::ostream& suo::operator<<(std::ostream& _stream, const Frame::Printer& print
 
 
 	if (flags & Frame::PrintMetadata) {
-		stream << "Metadata:" << "	";
+		stream << "Metadata: ";
 		if (frame.metadata.size() > 0) {
 			bool first = true;
 			for (auto meta : frame.metadata) {
@@ -182,7 +182,7 @@ Frame Frame::deserialize_from_json(const std::string& json_string) {
 
 string Frame::serialize_to_json() const {
 
-	json dict;
+	json dict = json::object();
 	dict["id"] = id;
 
 	/* Format metadata to a JSON dictionary */
