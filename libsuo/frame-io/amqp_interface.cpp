@@ -49,7 +49,6 @@ AMQPInterface::AMQPInterface(const Config& conf_):
 }
 
 AMQPInterface::~AMQPInterface() {
-	cout << "destuctor!" << endl;
 	channel.close();
 	connection.close();	
 }
@@ -58,41 +57,22 @@ AMQPInterface::~AMQPInterface() {
 void AMQPInterface::tick(suo::Timestamp now)
 {
 	(void)now;
-	for (int fd : all_fds)
+	for (int fd : fds)
 		connection.process(fd, AMQP::readable | AMQP::writable);
 }
 
 void AMQPInterface::sinkFrame(const Frame& frame, Timestamp timestamp) {
-
-	json dict;
-	dict["id"] = frame.id;
-	
-	if ((frame.flags & Frame::Flags::has_timestamp) != Frame::Flags::none)
-		dict["timestamp"] = frame.timestamp;
-
-
-	/* Format metadata to a JSON dictionary */
-	json meta_dict;
-	for (const Metadata& metadata : frame.metadata) {
-		//meta_dict[metadata.ident] = metadata.value;
-	}
-	dict["metadata"] = meta_dict;
-
-	/* Format binary data to hexadecimal string */
-	stringstream hexa_stream;
-	hexa_stream << setfill('0') << hex;
-	for (size_t i = 0; i < frame.size(); i++)
-		hexa_stream << setw(2) << (int)frame.data[i];
-	dict["data"] = hexa_stream.str();
-
-	/* Dump JSON object to string and send it */
-	channel.publish(conf.exchange, conf.tx_routing_key, dict.dump());
-	cout << dict.dump() << endl;
+	string json_string = frame.serialize_to_json();
+	channel.publish(conf.exchange, conf.tx_routing_key, json_string);
 }
 
-void AMQPInterface::sourceFrame(Frame& frame, Timestamp now) {
-	//frame = read_fifo();
 
+void AMQPInterface::sourceFrame(Frame& frame, Timestamp now) {
+	if (frame_queue.empty() == false) {
+		frame = frame_queue.front();
+		frame_queue.pop();
+		cout << frame(Frame::PrintData | Frame::PrintMetadata);
+	}
 }
 
 
@@ -103,11 +83,16 @@ void AMQPInterface::message_callback(const AMQP::Message& message, uint64_t deli
 	(void)deliveryTag;
 	(void)redelivered;
 
-	cerr << "message_callback" << message.exchange() << " " << message.routingkey() << endl;
-	cerr << string_view(message.body(), message.bodySize()) << endl;
+	//cerr << "message_callback" << message.exchange() << " " << message.routingkey() << endl;
+	//cerr << string_view(message.body(), message.bodySize()) << endl;
 
-	auto frame = Frame::deserialize_from_json(string(message.body(), message.bodySize()));
-	cout << frame;
+	try {
+		frame_queue.push(Frame::deserialize_from_json(string(message.body(), message.bodySize())));
+	}
+	catch (const std::exception& e) {
+		cerr << string_view(message.body(), message.bodySize()) << endl;
+		cerr << "Failed to parse received JSON message: " << e.what() << endl;
+	}
 }
 
 void AMQPInterface::onAttached(AMQP::TcpConnection* connection)
@@ -157,19 +142,10 @@ void AMQPInterface::monitor(AMQP::TcpConnection* connection, int fd, int flags)
 	(void)connection;
 	//cout << "AMQP Monitor " << fd << " " << flags << endl;
 
-	if (flags == 0) {
-		r_fds.erase(fd);
-		w_fds.erase(fd);
-		all_fds.erase(fd);
-	}
-	else {
-		all_fds.insert(fd);
-		if (flags & AMQP::readable)
-			r_fds.insert(fd);
-		if (flags & AMQP::writable)
-			w_fds.insert(fd);
-	}
-
+	if (flags == 0)
+		fds.erase(fd);
+	else
+		fds.insert(fd);
 }
 
 #endif

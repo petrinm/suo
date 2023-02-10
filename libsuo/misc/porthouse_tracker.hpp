@@ -12,7 +12,7 @@
 
 namespace suo {
 
-class PorthouseTracker : public AMQP::TcpHandler
+class PorthouseTracker : public AMQP::TcpHandler, Block
 {
 public:
 	struct Config

@@ -38,9 +38,11 @@ public:
 
 private:
 	Config conf;
-	std::set<int> r_fds, w_fds, all_fds;
+	std::set<int> fds;
 	AMQP::TcpConnection connection;
 	AMQP::TcpChannel channel;
+
+	std::queue<suo::Frame> frame_queue;
 
 	/* AMQP message callback */
 	void message_callback(const AMQP::Message& message, uint64_t deliveryTag, bool redelivered);
