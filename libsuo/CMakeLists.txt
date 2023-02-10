@@ -11,6 +11,7 @@ add_compile_options(-g -Wall -Wextra)
 add_library(suo SHARED
     suo.cpp
     frame.cpp
+    generators.cpp
     plotter.cpp
     modem/demod_fsk_corrbank.cpp
     modem/demod_fsk_mfilt.cpp
@@ -27,19 +28,22 @@ add_library(suo SHARED
     coding/randomizer.cpp
 #    coding/reed_solomon.cpp
 #    coding/viterbi_decoder.cpp
+    coding/crc.cpp
     framing/golay_deframer.cpp
     framing/golay_framer.cpp
     framing/hdlc_deframer.cpp
     framing/hdlc_framer.cpp
-#    framing/syncword_deframer.cpp
-#    framing/syncword_framer.cpp
+    framing/syncword_deframer.cpp
+    framing/syncword_framer.cpp
 #    framing/tetra_deframer.cpp
     framing/utils.cpp
-    frame-io/zmq_input.cpp
-    frame-io/zmq_output.cpp
+    frame-io/amqp_interface.cpp
+    frame-io/zmq_interface.cpp
     frame-io/file_dump.cpp
     signal-io/file_io.cpp
     signal-io/soapysdr_io.cpp
+    misc/porthouse_tracker.cpp
+    misc/rigctl.cpp
 )
 
 

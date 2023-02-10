@@ -17,5 +17,4 @@ add_compile_options(-g -Wall -Wextra)
 add_compile_options(-Wno-unused)
 
 add_subdirectory(libsuo)
-add_subdirectory(skymodem)
 add_subdirectory(tests)
