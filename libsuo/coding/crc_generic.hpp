@@ -40,7 +40,7 @@ public:
 	/* */
 	T init() const {
 		if (algo.refIn)
-			return reverse_bits<T>(algo.init) >> (TypeWidth - Width);
+			return reverse_bits((T)algo.init) >> (TypeWidth - Width);
 		else
 			return algo.init << (TypeWidth - Width);
 	}
@@ -48,7 +48,7 @@ public:
 	/* */
 	T init(T initial) const {
 		if (algo.refIn)
-			return reverse_bits<T>(initial) >> (TypeWidth - Width);
+			return reverse_bits(initial) >> (TypeWidth - Width);
 		else
 			return initial << (TypeWidth - Width);
 	}
@@ -128,7 +128,7 @@ private:
 		/* Generate new lookup table */
 		TableType& new_table = cache[&algo];
 		const T poly = algo.refIn ?
-			(reverse_bits<T>(algo.poly) >> (TypeWidth - Width)) :
+			(reverse_bits((T)algo.poly) >> (TypeWidth - Width)) :
 			(algo.poly << (TypeWidth - Width));
 
 		for (unsigned int i = 0; i < 256; i++) {

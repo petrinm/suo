@@ -65,3 +65,46 @@ size_t suo::word_to_msb_bits(Bit* bits, size_t nbits, uint64_t word)
 	}
 	return nbits;
 }
+
+
+
+// O(1) bit reversal functions
+// https://www.geeksforgeeks.org/reverse-bits-using-lookup-table-in-o1-time/
+
+#define R2(n)  n, n + 2 * 64, n + 1 * 64, n + 3 * 64
+#define R4(n)  R2(n), R2(n + 2 * 16), R2(n + 1 * 16), R2(n + 3 * 16)
+#define R6(n)  R4(n), R4(n + 2 * 4), R4(n + 1 * 4), R4(n + 3 * 4)
+
+static uint8_t reverse_uint8_table[256] = { R6(0), R6(2), R6(1), R6(3) };
+
+
+uint8_t suo::reverse_bits(uint8_t num)
+{
+	return reverse_uint8_table[num];
+}
+
+uint16_t suo::reverse_bits(uint16_t num)
+{
+	return (reverse_uint8_table[(num >> 0) & 0xff] << 8) |
+	       (reverse_uint8_table[(num >> 8) & 0xff] << 0);
+}
+
+uint32_t suo::reverse_bits(uint32_t num)
+{
+	return (reverse_uint8_table[(num >>  0) & 0xff] << 24) |
+	       (reverse_uint8_table[(num >>  8) & 0xff] << 16) |
+	       (reverse_uint8_table[(num >> 16) & 0xff] <<  8) |
+	       (reverse_uint8_table[(num >> 24) & 0xff] <<  0);
+}
+
+uint64_t suo::reverse_bits(uint64_t num)
+{
+	return (reverse_uint8_table[(num >>  0) & 0xff] << 24) |
+	       (reverse_uint8_table[(num >>  8) & 0xff] << 16) |
+	       (reverse_uint8_table[(num >> 16) & 0xff] << 38) |
+	       (reverse_uint8_table[(num >> 24) & 0xff] << 32) |
+	       (reverse_uint8_table[(num >> 32) & 0xff] << 24) |
+	       (reverse_uint8_table[(num >> 40) & 0xff] << 16) |
+	       (reverse_uint8_table[(num >> 48) & 0xff] <<  8) |
+	       (reverse_uint8_table[(num >> 56) & 0xff] <<  0);
+}
