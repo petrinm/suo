@@ -45,17 +45,21 @@ public:
 		/* Minimum silence time between frames in bits. */
 		unsigned int minimum_silence;
 
-		/* If true, */
+		/* If true, only frames passing CRC data integrity check will be forwarded. */
 		bool check_crc;
 	};
 
 	explicit HDLCDeframer(const Config& conf = Config());
 
+	HDLCDeframer(const HDLCDeframer&) = delete;
+	HDLCDeframer& operator=(const HDLCDeframer&) = delete;
+
 	void reset();
 
 	void sinkSymbol(Symbol bit, Timestamp now);
+	//void sinkSymbols(const SymbolVector& symbols, Timestamp timestamp);
 
-	Port<const Frame&, Timestamp> sinkFrame;
+	Port<Frame&, Timestamp> sinkFrame;
 	Port<bool, Timestamp> syncDetected;
 
 private:
@@ -71,12 +75,14 @@ private:
 	State state;
 	unsigned int shift;
 	unsigned int bit_idx;
-	unsigned int stuffing_counter;
+	unsigned int silence_counter;
+	Frame frame;
+
+	// Scrambler state
 	Symbol last_bit;
 	uint32_t scrambler;
-	unsigned int silence_counter;
+	unsigned int stuffing_counter;
 
-	Frame frame;
 };
 
 }; // namespace suo

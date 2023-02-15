@@ -30,7 +30,7 @@ uint16_t suo::crc16_ccitt(const uint8_t* data_p, size_t length)
 
 HDLCDeframer::Config::Config() {
 	mode = G3RUH;
-	minimum_frame_length = 6;
+	minimum_frame_length = 3;
 	maximum_frame_length = 128;
 	minimum_silence = 6 * 8;
 	check_crc = true;
@@ -52,8 +52,10 @@ HDLCDeframer::HDLCDeframer(const Config& conf) :
 
 void HDLCDeframer::reset()
 {
+	syncDetected.emit(false, 0);
 	state = WaitingSync;
 	shift = 0;
+	frame.data.clear();
 	stuffing_counter = 0;
 	bit_idx = 0;
 }
@@ -99,6 +101,8 @@ void HDLCDeframer::findStartFlag(Symbol bit, Timestamp now) {
 
 		// Start new frame
 		frame.setMetadata("sync_timestamp", now);
+		frame.setMetadata("sync_utc_timestamp", getISOCurrentTimestamp());
+
 	}
 
 	stuffing_counter = bit ? (stuffing_counter + 1) : 0;
@@ -114,7 +118,7 @@ void HDLCDeframer::receivingFrame(Symbol bit, Timestamp now) {
 			// 6th 1 breaks the stuffing rule. End flag detected! 
 
 			if (frame.data.size() < conf.minimum_frame_length) {
-				// Repeated start flags
+				// Repeated start flag
 				bit_idx = 0;
 				shift = 0;
 				frame.data.clear();
@@ -123,6 +127,7 @@ void HDLCDeframer::receivingFrame(Symbol bit, Timestamp now) {
 
 			syncDetected.emit(false, now);
 			frame.setMetadata("completed_timestamp", now);
+			frame.setMetadata("completed_utc_timestamp", getISOCurrentTimestamp());
 
 			if (conf.check_crc) {
 				const size_t len = frame.data.size() - 2;

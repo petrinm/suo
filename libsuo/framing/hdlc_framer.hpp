@@ -2,6 +2,7 @@
 
 #include <memory>
 #include "suo.hpp"
+#include "generators.hpp"
 #include "framing/hdlc_deframer.hpp"
 
 namespace suo
@@ -12,13 +13,6 @@ namespace suo
 class HDLCFramer : public Block
 {
 public:
-
-	enum State {
-		GeneratePreamble,
-		GenerateData,
-		GenerateTrailer,
-	};
-
 	struct Config {
 		Config();
 
@@ -38,26 +32,34 @@ public:
 
 	explicit HDLCFramer(const Config& conf = Config());
 	
+	HDLCFramer(const HDLCFramer&) = delete;
+	HDLCFramer& operator=(const HDLCFramer&) = delete;
+
+
 	void reset();
 
 	void sourceSymbols(SymbolVector& symbols, Timestamp now);
-	
+
 	Port<Frame&, Timestamp> sourceFrame;
 
 private:
 
+	/* Coroutine for geneting symbol sequence */
+	SymbolGenerator generateSymbols();
+
+	/* Bit scrambler */
 	Symbol scramble_bit(Symbol bit);
+	void reset_scrambler();
 
 	/* Configuration */
 	Config conf;
 
 	/* State */
-	State state;
-	size_t byte_idx;
 	Symbol last_bit;
 	unsigned int scrambler;
 	unsigned int stuffing_counter;
-	
+	SymbolGenerator symbol_gen;
+
 	Frame frame;
 };
 
