@@ -21,10 +21,21 @@ SymbolVector word_to_msb_bits(uint8_t byte);
 size_t word_to_msb_bits(Bit* bits, uint64_t word, size_t nbits);
 
 
+/* 
+ * Reverse the bit order of given value. 
+ */
+uint8_t reverse_bits(uint8_t val);
+uint16_t reverse_bits(uint16_t val);
+uint32_t reverse_bits(uint32_t val);
+uint64_t reverse_bits(uint64_t val);
 
-uint8_t reverse_bits(uint8_t);
-uint16_t reverse_bits(uint16_t);
-uint32_t reverse_bits(uint32_t);
-uint64_t reverse_bits(uint64_t);
+
+/*
+ * Calculate the bit parity of the given value.
+ */
+unsigned int bit_parity(uint8_t val);
+unsigned int bit_parity(uint16_t val);
+unsigned int bit_parity(uint32_t val);
+unsigned int bit_parity(uint64_t val);
 
 };

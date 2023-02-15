@@ -68,6 +68,52 @@ size_t suo::word_to_msb_bits(Bit* bits, size_t nbits, uint64_t word)
 
 
 
+
+static const uint8_t ParityTable[256] = {
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
+	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
+};
+
+
+unsigned int suo::bit_parity(uint8_t x) {
+	return ParityTable[x];
+}
+
+unsigned int suo::bit_parity(uint16_t x) {
+	x ^= (x >> 8);
+	return ParityTable[x];
+}
+
+unsigned int suo::bit_parity(uint32_t x) {
+	x ^= (x >> 16);
+	x ^= (x >> 8);
+	return ParityTable[x];
+}
+
+unsigned int suo::bit_parity(uint64_t x) {
+	x ^= (x >> 32);
+	x ^= (x >> 16);
+	x ^= (x >> 8);
+	return ParityTable[x];
+}
+
+
+
+
 // O(1) bit reversal functions
 // https://www.geeksforgeeks.org/reverse-bits-using-lookup-table-in-o1-time/
 
@@ -85,26 +131,26 @@ uint8_t suo::reverse_bits(uint8_t num)
 
 uint16_t suo::reverse_bits(uint16_t num)
 {
-	return (reverse_uint8_table[(num >> 0) & 0xff] << 8) |
-	       (reverse_uint8_table[(num >> 8) & 0xff] << 0);
+	return ((uint16_t)reverse_uint8_table[(num >> 0) & 0xff] << 8) |
+	       ((uint16_t)reverse_uint8_table[(num >> 8) & 0xff] << 0);
 }
 
 uint32_t suo::reverse_bits(uint32_t num)
 {
-	return (reverse_uint8_table[(num >>  0) & 0xff] << 24) |
-	       (reverse_uint8_table[(num >>  8) & 0xff] << 16) |
-	       (reverse_uint8_table[(num >> 16) & 0xff] <<  8) |
-	       (reverse_uint8_table[(num >> 24) & 0xff] <<  0);
+	return ((uint32_t)reverse_uint8_table[(num >>  0) & 0xff] << 24) |
+	       ((uint32_t)reverse_uint8_table[(num >>  8) & 0xff] << 16) |
+	       ((uint32_t)reverse_uint8_table[(num >> 16) & 0xff] <<  8) |
+	       ((uint32_t)reverse_uint8_table[(num >> 24) & 0xff] <<  0);
 }
 
 uint64_t suo::reverse_bits(uint64_t num)
 {
-	return (reverse_uint8_table[(num >>  0) & 0xff] << 24) |
-	       (reverse_uint8_table[(num >>  8) & 0xff] << 16) |
-	       (reverse_uint8_table[(num >> 16) & 0xff] << 38) |
-	       (reverse_uint8_table[(num >> 24) & 0xff] << 32) |
-	       (reverse_uint8_table[(num >> 32) & 0xff] << 24) |
-	       (reverse_uint8_table[(num >> 40) & 0xff] << 16) |
-	       (reverse_uint8_table[(num >> 48) & 0xff] <<  8) |
-	       (reverse_uint8_table[(num >> 56) & 0xff] <<  0);
+	return ((uint64_t)reverse_uint8_table[(num >>  0) & 0xff] << 24) |
+	       ((uint64_t)reverse_uint8_table[(num >>  8) & 0xff] << 16) |
+	       ((uint64_t)reverse_uint8_table[(num >> 16) & 0xff] << 38) |
+	       ((uint64_t)reverse_uint8_table[(num >> 24) & 0xff] << 32) |
+	       ((uint64_t)reverse_uint8_table[(num >> 32) & 0xff] << 24) |
+	       ((uint64_t)reverse_uint8_table[(num >> 40) & 0xff] << 16) |
+	       ((uint64_t)reverse_uint8_table[(num >> 48) & 0xff] <<  8) |
+	       ((uint64_t)reverse_uint8_table[(num >> 56) & 0xff] <<  0);
 }
