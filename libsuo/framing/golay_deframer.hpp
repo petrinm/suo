@@ -28,10 +28,10 @@ public:
 		Config();
 
 		/* Syncword */
-		unsigned int sync_word;
+		unsigned int syncword;
 
 		/* Number of bits in syncword */
-		unsigned int sync_len;
+		unsigned int syncword_len;
 
 		/* Maximum number of bit errors */
 		unsigned int sync_threshold;
@@ -48,23 +48,30 @@ public:
 
 	explicit GolayDeframer(const Config& conf = Config());
 	
+	GolayDeframer(const GolayDeframer&) = delete;
+	GolayDeframer& operator=(const GolayDeframer&) = delete;
+
 	void reset();
 	
 	void sinkSymbol(Symbol bit, Timestamp time);
 	void sinkSymbols(const std::vector<Symbol>& symbols, Timestamp timestamp);
 
-	Port<const Frame&, Timestamp> sinkFrame;
+	void setMetadata(const std::string& name, const MetadataValue& value);
+
+	Port<Frame&, Timestamp> sinkFrame;
 	Port<bool, Timestamp> syncDetected;
 
 private:
 
-	void findSyncword(Symbol bit, Timestamp time);
-	void receiveHeader(Symbol bit, Timestamp time);
-	void receivePayload(Symbol bit, Timestamp time);
+	void findSyncword(Symbol bit, Timestamp now);
+	void receiveHeader(Symbol bit, Timestamp now);
+	void receivePayload(Symbol bit, Timestamp now);
 	
 	/* Configuration */
 	Config conf;
-	uint64_t sync_mask;
+	ReedSolomon rs;
+	ConvolutionalEncoder conv_coder;
+	uint64_t syncword_mask;
 
 	/* State */
 	State state;

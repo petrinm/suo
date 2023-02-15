@@ -12,8 +12,8 @@ using namespace suo;
 
 
 GolayDeframer::Config::Config() {
-	sync_word = 0xC9D08A7B;
-	sync_len = 32;
+	syncword = 0xC9D08A7B;
+	syncword_len = 32;
 	sync_threshold = 3;
 	skip_viterbi = 0;
 	skip_randomizer = 0;
@@ -21,14 +21,20 @@ GolayDeframer::Config::Config() {
 }
 
 GolayDeframer::GolayDeframer(const Config& conf) :
-	conf(conf)
+	conf(conf),
+	rs(RSCodes::CCSDS_RS_255_223),
+	conv_coder(ConvolutionCodes::CCSDS_1_2_7)
 {
-	sync_mask = (1ULL << conf.sync_len) - 1;
+	if (conf.syncword_len > 8 * sizeof(conf.syncword))
+		throw SuoError("Unrealistic syncword length");
+
+	syncword_mask = (1ULL << conf.syncword_len) - 1;
 	reset();
 }
 
 void GolayDeframer::reset()
 {
+	syncDetected.emit(false, 0);
 	state = Syncing;
 	latest_bits = 0;
 	frame.clear();
@@ -46,11 +52,11 @@ void GolayDeframer::findSyncword(Symbol bit, Timestamp now)
 
 #if 0
 	// Check for inverse of the syncword
-	if ((latest_bits & sync_mask) == (conf.sync_word ^ sync_mask))
+	if ((latest_bits & syncword_mask) == (conf.syncword ^ syncword_mask))
 		cout << "Inversed syncword detected!" << endl;
 #endif
 
-	unsigned int sync_errors = __builtin_popcountll((latest_bits & sync_mask) ^ conf.sync_word);
+	unsigned int sync_errors = __builtin_popcountll((latest_bits & syncword_mask) ^ conf.syncword);
 	if (sync_errors > conf.sync_threshold)
 		return;
 
@@ -66,6 +72,7 @@ void GolayDeframer::findSyncword(Symbol bit, Timestamp now)
 	frame.timestamp = now;
 	frame.setMetadata("sync_errors", sync_errors);
 	frame.setMetadata("sync_timestamp", now);
+	frame.setMetadata("sync_utc_timestamp", getISOCurrentTimestamp());
 
 	syncDetected.emit(true, now);
 	state = ReceivingHeader;
@@ -85,21 +92,21 @@ void GolayDeframer::receiveHeader(Symbol bit, Timestamp now)
 	int golay_errors = decode_golay24(&coded_len);
 	if (golay_errors < 0)
 	{
-		// cout << "GOLAY failed!" << endl;
+		// cout << "Golay decode failed!" << endl;
 		//  TODO: Increase some counter
-		state = Syncing;
-		syncDetected.emit(false, now);
+		reset();
+		return;
 	}
 
 	// cout << "GOLAY errors " << golay_errors << endl;
-	//  The 8 least signigicant bit indicate the lenght
+	// The 8 least signigicant bit indicate the lenght
 	frame_len = 0xFF & coded_len;
 
 	// Sanity
 	if ((frame_len & 0x00) != 0)
 	{
-		state = Syncing;
-		syncDetected.emit(false, now);
+		reset();
+		return;
 	}	
 
 	frame.setMetadata("golay_errors", golay_errors);
@@ -137,23 +144,27 @@ void GolayDeframer::receivePayload(Symbol bit, Timestamp now)
 	state = Syncing;
 	frame.setMetadata("completed_timestamp", now);
 
-	if (conf.skip_viterbi == 0 && (coded_len & 0x800) != 0)
+	if (conf.skip_viterbi == false && (coded_len & 0x800) != 0)
 	{
 		/* Decode viterbi */
-		throw SuoError("Viterbi not yet implemented");
+		cerr << "Viterbi not yet implemented" << endl;
+		reset();
+		return;
 	}
 
-	if (conf.skip_randomizer == 0 && (coded_len & 0x400) != 0)
+	if (conf.skip_randomizer == false && (coded_len & 0x400) != 0)
 	{
 		/* Scrambler the bytes */
 		for (size_t i = 0; i < frame.data.size(); i++)
 			frame.data[i] ^= ccsds_randomizer[i];
 	}
 
-	if (conf.skip_rs == 0 && (coded_len & 0x200) != 0)
+	if (conf.skip_rs == false && (coded_len & 0x200) != 0)
 	{
 		/* Decode Reed-Solomon */
-		throw SuoError("Reed-Solomon not yet implemented");
+		cerr << "Reed-Solomon not yet implemented" << endl;
+		reset();
+		return;
 	}
 
 	syncDetected.emit(false, now);
@@ -183,10 +194,14 @@ void GolayDeframer::sinkSymbol(Symbol bit, Timestamp now)
 }
 
 
-void GolayDeframer::sinkSymbols(const std::vector<Symbol> &symbols, Timestamp timestamp)
+void GolayDeframer::sinkSymbols(const std::vector<Symbol> &symbols, Timestamp now)
 {
 	for (const Symbol& symbol: symbols)
-		sinkSymbol(symbol, timestamp);
+		sinkSymbol(symbol, now);
+}
+
+void GolayDeframer::setMetadata(const std::string& name, const MetadataValue& value) {
+	frame.setMetadata(name, value);
 }
 
 Block* createGolayDeframer(const Kwargs &args)

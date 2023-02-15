@@ -12,102 +12,101 @@ using namespace std;
 using namespace suo;
 
 
-#define MAX_FRAME_LENGTH  255
-#define RS_LEN      32
-
 
 GolayFramer::Config::Config() {
-	sync_word = 0xC9D08A7B;
-	sync_len = 32;
-	preamble_len = 0x50;
-	use_viterbi = 0;
-	use_randomizer = 1;
-	use_rs = 1;
-	golay_flags = 0;
+	syncword = 0xC9D08A7B;
+	syncword_len = 32;
+	preamble_len = 80;
+	use_viterbi = false;
+	use_randomizer = true;
+	use_rs = true;
 }
 
 
 GolayFramer::GolayFramer(const Config& conf) :
-	conf(conf)
+	conf(conf),
+	rs(RSCodes::CCSDS_RS_255_223),
+	conv_coder(ConvolutionCodes::CCSDS_1_2_7)
 {
-	data_buffer.reserve(MAX_FRAME_LENGTH);
+
+	if (conf.syncword_len > 8 * sizeof(conf.syncword))
+		throw SuoError("Unrealistic syncword length");
+
 	reset();
 }
 
+
 void GolayFramer::reset() {
-	state = Waiting;
+	//if (symbol_gen.running()) 
+	//	symbol_gen.cancel();
 	frame.clear();
 }
 
-void GolayFramer::sourceSymbols(SymbolVector& symbols, Timestamp t)
+
+void GolayFramer::sourceSymbols(SymbolVector& symbols, Timestamp now)
 {
-	if (frame.empty()) {
-		// Get a frame
-		sourceFrame.emit(frame, 0);
-		if (frame.empty())
-			return;
-	}
-
-	const size_t max_symbols = symbols.capacity();
-
-	/* Start processing a frame */
-	unsigned int payload_len = frame.data.size();
-	if (conf.use_rs)
-	 	payload_len += RS_LEN;
-
-	// TODO: Allow symbol generation in smaller partitions
-	size_t syms = conf.preamble_len + conf.sync_len + 24 + 8 * payload_len;
-	if (max_symbols < syms)
-		throw SuoError("Too small buffer! Symbols to generate %d, buffer size %d", syms, max_symbols);
-
-	symbols.resize(syms);
-	symbols.flags = start_of_burst | end_of_burst;
-
-	/* Generate preamble sequence */
-	Symbol *bit_ptr = symbols.data();
-	for (unsigned int i = 0; i < conf.preamble_len; i++)
-		*bit_ptr++ = i & 1;
-
-	/* Append syncword */
-	bit_ptr += word_to_lsb_bits(bit_ptr, conf.sync_len, conf.sync_word);
-
-	/* Append Golay coded length (+coding flags) */
-	uint32_t coded_len = conf.golay_flags | payload_len;
-	if (conf.use_rs)
-		coded_len |= 0x200;
-	if (conf.use_randomizer)
-		coded_len |= 0x400;
-	if (conf.use_viterbi)
-		coded_len |= 0x800;
-
-	encode_golay24(&coded_len);
-	bit_ptr += word_to_lsb_bits(bit_ptr, 24, coded_len);
-
-	/* Calculate Reed Solomon */
-	if (conf.use_rs) {
-		//fec_encode(l_rs, frame->data_len, (unsigned char*)frame->data, data_buffer);
+	if (symbol_gen.running()) {
+		cout << "more gen" << endl;
+		// Source more symbols from generator
+		symbol_gen.sourceSymbols(symbols);
 	}
 	else {
-		data_buffer = frame.data;
-		//memcpy(data_buffer.data(), frame->raw_ptr(), frame->size());
+		// Try to source a new frame
+		frame.clear();
+		sourceFrame.emit(frame, now);
+		if (frame.empty() == false) {
+			cout << "new gen" << endl;
+			symbol_gen = generateSymbols(frame);
+			symbol_gen.sourceSymbols(symbols);
+		}
 	}
+}
+
+SymbolGenerator GolayFramer::generateSymbols(Frame& frame)
+{
+	/* Append Reed-Solomon FEC */
+	if (conf.use_rs)
+		rs.encode(frame.data);
+
+	/* Generate preamble sequence */
+	for (size_t i = 0; i < conf.preamble_len; i++)
+		co_yield (i & 1);
+
+	/* Append syncword */
+	co_yield word_to_lsb_bits(conf.syncword, conf.syncword_len);
+
+	/* Append Golay coded length (+coding flags) */
+	uint32_t coded_len = frame.size();
+	if (conf.use_rs) coded_len |= 0x200;
+	if (conf.use_randomizer) coded_len |= 0x400;
+	if (conf.use_viterbi) coded_len |= 0x800;
+
+	encode_golay24(&coded_len);
+	co_yield word_to_lsb_bits(coded_len, 24);
+
+	/* Calculate Reed Solomon */
+	ByteVector data_buffer = frame.data; // (conf.use_rs) ? rs.encode(frame.data) : frame.data;
 
 	/* Scrambler the bytes */
 	if (conf.use_randomizer) {
-		for (size_t i = 0; i < frame.data.size(); i++)
+		for (size_t i = 0; i < frame.size(); i++)
 			data_buffer[i] ^= ccsds_randomizer[i];
 	}
 
 	/* Viterbi decode all bits */
 	if (conf.use_viterbi) {
-		//fec_encode(l_viterbi, frame->data_len, data_buffer, viterbi_buffer);
-		//bit_ptr += bytes_to_bits(bit_ptr, viterbi_buffer, 2 * payload_len, 1);
+		SymbolVector viterbi_buffer;
+		viterbi_buffer.reserve(2 * frame.size());
+
+		//fec_encode(frame->data_len, data_buffer, viterbi_buffer);
+		//viterbi.sourceSymbols();
+		co_yield viterbi_buffer;
 	}
 	else {
-		bit_ptr += bytes_to_bits(bit_ptr, data_buffer.data(), payload_len, 1);
+		for (Byte byte: data_buffer)
+			co_yield word_to_lsb_bits(byte);
 	}
-		
-	frame.clear();
+	
 }
 
 Block* createGolayFramer(const Kwargs &args)
