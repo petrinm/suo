@@ -95,20 +95,20 @@ unsigned int suo::bit_parity(uint8_t x) {
 
 unsigned int suo::bit_parity(uint16_t x) {
 	x ^= (x >> 8);
-	return ParityTable[x];
+	return ParityTable[x & 0xff];
 }
 
 unsigned int suo::bit_parity(uint32_t x) {
 	x ^= (x >> 16);
 	x ^= (x >> 8);
-	return ParityTable[x];
+	return ParityTable[x & 0xff];
 }
 
 unsigned int suo::bit_parity(uint64_t x) {
 	x ^= (x >> 32);
 	x ^= (x >> 16);
 	x ^= (x >> 8);
-	return ParityTable[x];
+	return ParityTable[x & 0xff];
 }
 
 
@@ -145,9 +145,9 @@ uint32_t suo::reverse_bits(uint32_t num)
 
 uint64_t suo::reverse_bits(uint64_t num)
 {
-	return ((uint64_t)reverse_uint8_table[(num >>  0) & 0xff] << 24) |
-	       ((uint64_t)reverse_uint8_table[(num >>  8) & 0xff] << 16) |
-	       ((uint64_t)reverse_uint8_table[(num >> 16) & 0xff] << 38) |
+	return ((uint64_t)reverse_uint8_table[(num >>  0) & 0xff] << 56) |
+	       ((uint64_t)reverse_uint8_table[(num >>  8) & 0xff] << 48) |
+	       ((uint64_t)reverse_uint8_table[(num >> 16) & 0xff] << 40) |
 	       ((uint64_t)reverse_uint8_table[(num >> 24) & 0xff] << 32) |
 	       ((uint64_t)reverse_uint8_table[(num >> 32) & 0xff] << 24) |
 	       ((uint64_t)reverse_uint8_table[(num >> 40) & 0xff] << 16) |
