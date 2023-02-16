@@ -2,6 +2,7 @@
 
 
 #include "framing/golay_deframer.hpp"
+#include "framing/golay_framer.hpp"
 #include "coding/golay24.hpp"
 #include "coding/randomizer.hpp"
 #include "registry.hpp"
@@ -15,9 +16,10 @@ GolayDeframer::Config::Config() {
 	syncword = 0xC9D08A7B;
 	syncword_len = 32;
 	sync_threshold = 3;
-	skip_viterbi = 0;
-	skip_randomizer = 0;
-	skip_rs = 0;
+	header_filter = GolayFramer::use_randomizer_flag | GolayFramer::use_reed_solomon_flag;
+	skip_viterbi = false;
+	skip_randomizer = false;
+	skip_rs = false;
 }
 
 GolayDeframer::GolayDeframer(const Config& conf) :
@@ -92,35 +94,38 @@ void GolayDeframer::receiveHeader(Symbol bit, Timestamp now)
 	int golay_errors = decode_golay24(&coded_len);
 	if (golay_errors < 0)
 	{
-		// cout << "Golay decode failed!" << endl;
-		//  TODO: Increase some counter
+		cout << "Golay decode failed!" << endl;
+		// TODO: Increase some counter
 		reset();
 		return;
 	}
 
-	// cout << "GOLAY errors " << golay_errors << endl;
 	// The 8 least signigicant bit indicate the lenght
 	frame_len = 0xFF & coded_len;
 
-	// Sanity
-	if ((frame_len & 0x00) != 0)
-	{
+	// Receive only packets which matches to filter
+	if ((coded_len & 0xF00) != conf.header_filter) {
 		reset();
 		return;
-	}	
+	}
 
 	frame.setMetadata("golay_errors", golay_errors);
 	//frame.setMetadata("golay_coded", coded_len);
 
 	// Receive double number of bits if viterbi is used
-	if ((coded_len & 0x800) != 0)
+	if ((coded_len & GolayFramer::use_viterbi_flag) != 0) {
 		frame_len *= 2;
+		cerr << "Viterbi not yet implemented" << endl;
+		reset();
+		return;
+	}
 
 	// Clear for next state
 	latest_bits = 0;
 	bit_idx = 0;
 	state = ReceivingPayload;
 }
+
 
 /*
  * Receiving payload state
@@ -144,7 +149,7 @@ void GolayDeframer::receivePayload(Symbol bit, Timestamp now)
 	state = Syncing;
 	frame.setMetadata("completed_timestamp", now);
 
-	if (conf.skip_viterbi == false && (coded_len & 0x800) != 0)
+	if (conf.skip_viterbi == false && (coded_len & GolayFramer::use_viterbi_flag) != 0)
 	{
 		/* Decode viterbi */
 		cerr << "Viterbi not yet implemented" << endl;
@@ -152,19 +157,25 @@ void GolayDeframer::receivePayload(Symbol bit, Timestamp now)
 		return;
 	}
 
-	if (conf.skip_randomizer == false && (coded_len & 0x400) != 0)
+	if (conf.skip_randomizer == false && (coded_len & GolayFramer::use_randomizer_flag) != 0)
 	{
 		/* Scrambler the bytes */
 		for (size_t i = 0; i < frame.data.size(); i++)
 			frame.data[i] ^= ccsds_randomizer[i];
 	}
 
-	if (conf.skip_rs == false && (coded_len & 0x200) != 0)
+	if (conf.skip_rs == false && (coded_len & GolayFramer::use_reed_solomon_flag) != 0)
 	{
 		/* Decode Reed-Solomon */
-		cerr << "Reed-Solomon not yet implemented" << endl;
-		reset();
-		return;
+		try {
+			rs.decode(frame.data);
+		}
+		catch (ReedSolomonUncorrectable& e) {
+			// TODO: Do some 
+			cerr << "Reed-Solomon not yet implemented" << endl;
+			reset();
+			return;
+		}
 	}
 
 	syncDetected.emit(false, now);

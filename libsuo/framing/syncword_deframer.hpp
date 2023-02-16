@@ -51,7 +51,7 @@ public:
 
 	void setMetadata(const std::string& name, const MetadataValue& value);
 
-	Port<Frame&, Timestamp> sourceFrame;
+	Port<Frame&, Timestamp> sinkFrame;
 	Port<bool, Timestamp> syncDetected;
 
 private:

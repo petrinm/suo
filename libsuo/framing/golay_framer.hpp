@@ -13,6 +13,11 @@ class GolayFramer : public Block
 {
 public:
 
+	/* */
+	static const unsigned int use_reed_solomon_flag = 0x200;
+	static const unsigned int use_randomizer_flag = 0x400;
+	static const unsigned int use_viterbi_flag = 0x800;
+
 	struct Config {
 		Config();
 
@@ -64,7 +69,7 @@ private:
 	/* Configuration */
 	Config conf;
 	ReedSolomon rs;
-	ConvolutionalEncoder conv_coder;
+	ConvolutionalEncoder conv_encoder;
 
 	/* Framer state */
 	SymbolGenerator symbol_gen;

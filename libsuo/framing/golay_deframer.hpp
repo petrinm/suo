@@ -36,6 +36,9 @@ public:
 		/* Maximum number of bit errors */
 		unsigned int sync_threshold;
 
+		/* */
+		unsigned int header_filter;
+
 		/* Skip Reed-solomon coding */
 		unsigned int skip_rs;
 

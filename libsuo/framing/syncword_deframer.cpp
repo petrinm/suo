@@ -63,11 +63,43 @@ void SyncwordDeframer::findSyncword(Symbol bit, Timestamp now) {
 }
 
 void SyncwordDeframer::receiveHeader(Symbol bit, Timestamp now) {
+	latest_bits = (latest_bits << 1) | bit;
+	if (++bit_idx < 8)
+		return;
 
+	// Decode Golay code
+	frame_len = latest_bits;
+	frame.data.resize(frame_len);
+
+	// Clear for next state
+	latest_bits = 0;
+	bit_idx = 0;
+	state = ReceivingPayload;
 }
 
 void SyncwordDeframer::receivePayload(Symbol bit, Timestamp now) {
+	latest_bits = (latest_bits << 1) | bit;
+	if (++bit_idx < 8)
+		return;
 
+	//cerr << std::hex << latest_bits << endl;
+
+	frame.data.push_back(latest_bits);
+	latest_bits = 0;
+	bit_idx = 0;
+
+	if (frame.data.size() < frame_len)
+		return;
+
+	// Receiving the frame completed
+	state = Syncing;
+	frame.setMetadata("completed_timestamp", now);
+
+	syncDetected.emit(false, now);
+
+	sinkFrame.emit(frame, now);
+
+	frame.clear();
 }
 
 void SyncwordDeframer::sinkSymbol(Symbol bit, Timestamp now) {

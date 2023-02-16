@@ -26,11 +26,13 @@ GolayFramer::Config::Config() {
 GolayFramer::GolayFramer(const Config& conf) :
 	conf(conf),
 	rs(RSCodes::CCSDS_RS_255_223),
-	conv_coder(ConvolutionCodes::CCSDS_1_2_7)
+	conv_encoder(ConvolutionCodes::CCSDS_1_2_7)
 {
-
 	if (conf.syncword_len > 8 * sizeof(conf.syncword))
 		throw SuoError("Unrealistic syncword length");
+
+	if (conf.preamble_len > 1024)
+		throw SuoError("Unrealistic preamble length");
 
 	reset();
 }
@@ -46,7 +48,6 @@ void GolayFramer::reset() {
 void GolayFramer::sourceSymbols(SymbolVector& symbols, Timestamp now)
 {
 	if (symbol_gen.running()) {
-		cout << "more gen" << endl;
 		// Source more symbols from generator
 		symbol_gen.sourceSymbols(symbols);
 	}
@@ -55,19 +56,15 @@ void GolayFramer::sourceSymbols(SymbolVector& symbols, Timestamp now)
 		frame.clear();
 		sourceFrame.emit(frame, now);
 		if (frame.empty() == false) {
-			cout << "new gen" << endl;
 			symbol_gen = generateSymbols(frame);
 			symbol_gen.sourceSymbols(symbols);
 		}
 	}
 }
 
+
 SymbolGenerator GolayFramer::generateSymbols(Frame& frame)
 {
-	/* Append Reed-Solomon FEC */
-	if (conf.use_rs)
-		rs.encode(frame.data);
-
 	/* Generate preamble sequence */
 	for (size_t i = 0; i < conf.preamble_len; i++)
 		co_yield (i & 1);
@@ -77,16 +74,18 @@ SymbolGenerator GolayFramer::generateSymbols(Frame& frame)
 
 	/* Append Golay coded length (+coding flags) */
 	uint32_t coded_len = frame.size();
-	if (conf.use_rs) coded_len |= 0x200;
-	if (conf.use_randomizer) coded_len |= 0x400;
-	if (conf.use_viterbi) coded_len |= 0x800;
+	if (conf.use_rs) coded_len |= GolayFramer::use_reed_solomon_flag;
+	if (conf.use_randomizer) coded_len |= GolayFramer::use_randomizer_flag;
+	if (conf.use_viterbi) coded_len |= GolayFramer::use_viterbi_flag;
 
 	encode_golay24(&coded_len);
 	co_yield word_to_lsb_bits(coded_len, 24);
 
 	/* Calculate Reed Solomon */
-	ByteVector data_buffer = frame.data; // (conf.use_rs) ? rs.encode(frame.data) : frame.data;
-
+	ByteVector data_buffer = frame.data;
+	if (conf.use_rs)
+		rs.encode(data_buffer);
+	
 	/* Scrambler the bytes */
 	if (conf.use_randomizer) {
 		for (size_t i = 0; i < frame.size(); i++)
@@ -97,9 +96,7 @@ SymbolGenerator GolayFramer::generateSymbols(Frame& frame)
 	if (conf.use_viterbi) {
 		SymbolVector viterbi_buffer;
 		viterbi_buffer.reserve(2 * frame.size());
-
-		//fec_encode(frame->data_len, data_buffer, viterbi_buffer);
-		//viterbi.sourceSymbols();
+		//conv_encoder.sourceSymbols(viterbi_buffer);
 		co_yield viterbi_buffer;
 	}
 	else {
