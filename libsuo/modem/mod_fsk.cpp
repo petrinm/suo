@@ -125,78 +125,58 @@ void FSKModulator::modulateSamples(Symbol symbol) {
 }
 
 
-void FSKModulator::sourceSamples(SampleVector& samples, Timestamp now)
+void FSKModulator::sourceSamples(SampleVector& samples, Timestamp timestamp) {
+
+}
+
+
+SampleGenerator FSKModulator::sourceSamples(Timestamp now)
 {
-	Sample* write_ptr = samples.data();
-	size_t left = samples.capacity();
-	samples.resize(samples.capacity());
+	/*
+	 * Idle (check for now incoming frames)
+	 */
+	const Timestamp time_end = now; // + (Timestamp)(sample_ns * samples.capacity());
+	sourceSymbols.emit(symbols, time_end);
 
-	if (state == Idle) {
-		/*
-		 * Idle (check for now incoming frames)
-		 */
-		const Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity());
-		sourceSymbols.emit(symbols, time_end);
+	if (symbols.empty())
+		co_return;
 
-		if (symbols.empty())
-			return;
-
-
-		symbols.flags |= VectorFlags::start_of_burst;
-		state = Waiting;
-		symbols_i = 0;
-	}
-
-	if (state == Waiting) {
-		/*
-		 * Waiting for transmitting time
-		 */
-
-		if ((symbols.flags & has_timestamp)) {
-			// If start time is defined and in history, rise a warning 
-			if (symbols.timestamp < now) {
-				int64_t late = (int64_t)(now - symbols.timestamp);
-				if (symbols.flags & VectorFlags::no_late) {
-					cerr << "Warning: TX frame late by " << late << "ns! Discarding it!" << endl;
-					state = Idle;
-					symbols.clear();
-				}
-				else
-					cerr << "Warning: TX frame late by " << late << "ns" << endl;
+	/*
+	 * Waiting for transmitting time
+	 */
+	if ((symbols.flags & has_timestamp)) {
+		// If start time is defined and in history, rise a warning 
+		if (symbols.timestamp < now) {
+			int64_t late = (int64_t)(now - symbols.timestamp);
+			if (symbols.flags & VectorFlags::no_late) {
+				cerr << "Warning: TX frame late by " << late << "ns! Discarding it!" << endl;
+				co_return;
 			}
-
-			// If start time is in future, don't start sample generation yet
-			const Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity());
-			if (symbols.timestamp > time_end)
-				return;
+			else
+				cerr << "Warning: TX frame late by " << late << "ns" << endl;
 		}
 
-		nco_crcf_reset(l_nco);
-		nco_crcf_set_frequency(l_nco, nco_1Hz * (conf.center_frequency + conf.frequency_offset));
-		state = Transmitting;
+		// If start time is in future, don't start sample generation yet
+		const Timestamp time_end = now; // + (Timestamp)(sample_ns * samples.capacity());
+		if (symbols.timestamp > time_end)
+			co_return;
 	}
 
-	if (state == Transmitting) {
-		/*
-		 * Transmitting/generating samples
-		 */
+	nco_crcf_reset(l_nco);
+	nco_crcf_set_frequency(l_nco, nco_1Hz * (conf.center_frequency + conf.frequency_offset));
+	symbols.flags |= VectorFlags::start_of_burst;
 
-		while (1) {
+	/*
+		* Transmitting/generating samples
+		*/
+	
+	while (1) {
 
-			// Copy samples from modulator output to output sample buffer
-			if (mod_i < mod_samples.size()) {
+		//gen.sourceSymbols(symbols);
+		if (symbols.empty())
+			break;
 
-				size_t cpy = min(left, mod_samples.size() - mod_i);
-				for (size_t i = 0; i < cpy; i++)
-					*write_ptr++ = mod_samples[mod_i++];
-				left -= cpy;
-				
-				if (left == 0) {
-					cout << "FULL" << endl;
-					samples.resize(samples.capacity());
-					break;
-				}
-			}
+		for (Symbol symbol : symbols) {
 
 			// Fill the modulator output buffer
 			modulateSamples(symbols[symbols_i]);
@@ -211,79 +191,37 @@ void FSKModulator::sourceSamples(SampleVector& samples, Timestamp now)
 					mod_samples[i] *= hamming(hamming_window_start + i, hamming_window_len); // TODO: liquid_hamming
 			}
 
-			symbols_i++;
-			if (symbols_i > symbols.size()) {
-
-				bool end_of_burst = (symbols.flags & end_of_burst) != 0;
-				symbols.clear();
-
-				// Try to source new symbols
-				if (end_of_burst) {
-					Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity());
-					sourceSymbols.emit(symbols, time_end);
-					if (symbols.size() == 0)
-						cerr << "Symbol buffer underrun!" << endl;
-				}
-
-				// End of burst
-				if (symbols.size() == 0) {
-					state = Trailer;
-					symbols_i = 0;
-					break;
-				}
-			}
-
+			co_yield mod_samples;
 		}
 
+		if (symbols.flags & end_of_burst)
+			break;
+
+		symbols.clear();
 	}
 
-	if (state == Trailer) {
-		/*
-		 * Transmitting/generating samples
-		 */
+	/*
+	 * Transmitting/generating samples
+	 */
+	for (size_t i = 0; i < trailer_length; i++) {
 
-		while (1) {
+		// Feed zeros to the modulator to "flush" the filters
+		modulateSamples(0);
 
-			// Copy samples from modulator output to output sample buffer
-			if (mod_i < mod_samples.size()) {
-
-				size_t cpy = min(left, mod_samples.size() - mod_i);
-				for (size_t i = 0; i < cpy; i++)
-					*write_ptr++ = mod_samples[mod_i++];
-				left -= cpy;
-
-				if (mod_i != mod_samples.size()) {
-					samples.resize(samples.capacity());
-					break;
-				}
-			}
-
-			// Feed zeros to the modulator to "flush" the filters
-			modulateSamples(0);
-
-			// Calculate amplitude ramp down
-			if (conf.ramp_down_duration > 0) {
-				int end = symbols_i - trailer_length + conf.ramp_down_duration - 1;
-				if (end >= 0) {
-					const size_t ramp_duration = conf.ramp_down_duration * mod_rate;
-					const size_t hamming_window_start = (conf.ramp_down_duration + end) * mod_rate;
-					const size_t hamming_window_len = 2 * ramp_duration;
-					//cout << "Ramp down " << ramp_duration << " " << hamming_window_start << " " << hamming_window_len << " " << mod_rate << endl;
-					for (unsigned int i = 0; i < mod_samples.size(); i++)
-						mod_samples[i] *= hamming(hamming_window_start + i, hamming_window_len); // TODO: liquid_hamming
-				}
-			}
-
-			symbols_i++;
-			if (symbols_i > trailer_length) {
-				// Flag end of burst
-				samples.flags |= end_of_burst;
-				samples.resize(samples.capacity() - left);
-				reset();
-				break;
+		// Calculate amplitude ramp down
+		if (conf.ramp_down_duration > 0) {
+			int end = symbols_i - trailer_length + conf.ramp_down_duration - 1;
+			if (end >= 0) {
+				const size_t ramp_duration = conf.ramp_down_duration * mod_rate;
+				const size_t hamming_window_start = (conf.ramp_down_duration + end) * mod_rate;
+				const size_t hamming_window_len = 2 * ramp_duration;
+				//cout << "Ramp down " << ramp_duration << " " << hamming_window_start << " " << hamming_window_len << " " << mod_rate << endl;
+				for (unsigned int i = 0; i < mod_samples.size(); i++)
+					mod_samples[i] *= hamming(hamming_window_start + i, hamming_window_len); // TODO: liquid_hamming
 			}
 		}
-
+		
+		co_yield mod_samples;
 	}
 
 }

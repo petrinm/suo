@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include "suo.hpp"
 #include <liquid/liquid.h>
 
@@ -12,13 +13,6 @@ namespace suo {
 class GMSKModulator : public Block
 {	
 public:
-
-	enum State {
-		Idle = 0,
-		Waiting,
-		Transmitting,
-		Trailer
-	};
 
 	struct Config
 	{
@@ -46,7 +40,7 @@ public:
 
 		/*
 	 	 * Gaussian filter bandwidth-time product / excess bandwidth factor.
-		 * Usually 0.3 or 0.5
+		 * Usually 0.3 or 0.5.
 		 */
 		float bt;
 
@@ -65,13 +59,13 @@ public:
 
 	void sourceSamples(SampleVector& samples, Timestamp now);
 
+	void setFrequency(float frequency);
 	void setFrequencyOffset(float frequency_offset);
 
 	Port<SymbolVector&, Timestamp> sourceSymbols;
 
 private:
-
-	void modulateSamples(Symbol symbol);
+	SampleGenerator sampleGenerator();
 
 	/* Configuration */
 	Config conf;
@@ -81,15 +75,13 @@ private:
 	unsigned int mod_rate;      // GMSK modulator samples per symbols rate
 	unsigned int mod_max_samples;// Maximum number of samples generated from single symbol
 	float nco_1Hz;
-	unsigned int trailer_length; // [symbols]
-	Timestamp filter_delay; // [ns]
+	unsigned int trailer_length; // Number of symbols in trailer [symbols]
+	Timestamp filter_delay;      // Total timedelay in the FIR filtering [ns]
 
 	/* State */
-	State state;
 	SymbolVector symbols;     // Symbol buffer
-	size_t symbols_i;	      // Symbol buffer index
-	SampleVector mod_samples;
-	size_t mod_i;
+	SampleGenerator sample_gen;
+	SymbolGenerator symbol_gen;
 
 	/* Liquid-DSP objects */
 	gmskmod l_mod;            // GMSK modulator

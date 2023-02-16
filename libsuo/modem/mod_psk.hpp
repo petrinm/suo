@@ -11,13 +11,6 @@ namespace suo {
 class PSKModulator : public Block
 {
 public:
-	enum State
-	{
-		Idle,
-		Waiting,
-		Transmitting,
-		Trailer
-	};
 
 	struct Config {
 		Config();
@@ -56,7 +49,7 @@ public:
 	
 private:
 	
-	void modulateSamples(Symbol symbol);
+	SampleGenerator sourceGenerator(SymbolGenerator& gen);
 
 	/* Configuration */
 	Config conf;
@@ -66,18 +59,12 @@ private:
 	float nco_1Hz;
 	
 	/* State */
-	State state;
 	SymbolVector symbols;
-	unsigned int symbols_i;
-	SampleVector mod_samples;
-	size_t mod_i;
 
 	/* liquid-dsp and suo objects */
 	modemcf l_mod;
 	nco_crcf l_nco;
 	resamp_crcf l_resamp;     // Rational resampler
-
-
 };
 
 }; // namespace suo

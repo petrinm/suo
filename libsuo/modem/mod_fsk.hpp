@@ -60,13 +60,13 @@ public:
 	void sourceSamples(SampleVector& samples, Timestamp timestamp);
 	
 	Port<SymbolVector&, Timestamp> sourceSymbols;
-	
+
 	void setFrequencyOffset(float frequency_offset);
 
 private:
 
 	void modulateSamples(Symbol symbol);
-
+	SampleGenerator sourceSamples(Timestamp now);
 	/* Configuration */
 	Config conf;
 	float sample_ns;  // Sample duration in ns

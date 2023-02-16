@@ -33,8 +33,6 @@ PSKModulator::PSKModulator(const Config &_conf):
 	 * Buffers
 	 */
 	symbols.reserve(0x900);
-	mod_samples.resize(mod_rate);
-	symbols_i = 0;
 
 
 	/* Init liquid modem object to create complex symbols from bits */ 
@@ -71,11 +69,7 @@ PSKModulator::~PSKModulator()
 }
 
 void PSKModulator::reset() {
-	state = Idle;
 	symbols.clear();
-	symbols_i = 0;
-	mod_i = 0;
-	mod_samples.clear();
 
 	modemcf_reset(l_mod);
 	nco_crcf_reset(l_nco);
@@ -83,201 +77,126 @@ void PSKModulator::reset() {
 }
 
 
-void PSKModulator::modulateSamples(Symbol symbol) {
+void PSKModulator::sourceSamples(SampleVector& samples, Timestamp now) {
 
-	Sample mod_output[mod_rate];
-	mod_samples.resize(mod_rate);
+	// Source new symbols
+	Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity()) - filter_delay;
+	sourceSymbols.emit(symbols, time_end);
 
-	// Calculate complex symbol from bits
-	Complex complex_symbol;
-	modemcf_modulate(l_mod, symbol, &complex_symbol);
-
-	// Mix up the samples
-	Complex carrier;
-	for (unsigned int i = 0; i < mod_rate; i++) {
-		// Generate carrier
-		nco_crcf_step(l_nco);
-		nco_crcf_cexpf(l_nco, &carrier);
-
-		// Mix up the complex symbol
-		mod_output[i] = complex_symbol * carrier;
-	}
-
-	// Interpolate to final sample rate
-	unsigned int resampler_output = 0;
-	resamp_crcf_execute_block(l_resamp, mod_output, mod_rate, mod_samples.data(), &resampler_output);
-
-	for (size_t k = 0; k < resampler_output;k++)
-		cout << mod_samples[k] << endl;
-	mod_samples.resize(resampler_output);
-	mod_i = 0;
 }
 
 
-
-void PSKModulator::sourceSamples(SampleVector& samples, Timestamp now)
+SampleGenerator PSKModulator::sourceGenerator(SymbolGenerator& gen)
 {
-	Sample* write_ptr = samples.data();
-	size_t left = samples.capacity();
-	samples.resize(samples.capacity());
 
-
-	if (state == Idle) {
-		/*
-		 * Idle (check for now in-coming frames)
-		 */
-
-		// Source new symbols
-		Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity()) - filter_delay;
-		sourceSymbols.emit(symbols, time_end);
-
-		if (symbols.empty() == false) {
-			//if (symbols.flags.start_of_burst == false)
-			//	cerr << "warning: start of burst not properly flagged!" << endl;
-
-			state = Waiting;
-			symbols.flags |= VectorFlags::start_of_burst;
-			symbols_i = 0;
-		}
-	}
-
-	if (state == Waiting) {
-		/*
-		 * Waiting for transmitting time
-		 */
-
-		if ((symbols.flags & has_timestamp)) {
-			 // If start time is defined and in history, rise a warning 
-			if (symbols.timestamp < now) {
-				int64_t late = (int64_t)(now - symbols.timestamp);
-				if (symbols.flags & VectorFlags::no_late) {
-					cerr << "Warning: TX frame late by " << late << "ns! Discarding it!" << endl;
-					state = Idle;
-					symbols.clear();
-					return;
-				}
-				else
-					cerr << "Warning: TX frame late by " << late << "ns" << endl;
-			}
-
-			// If start time is in future, don't start sample generation yet
-			const Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity());
-			if (symbols.timestamp > time_end)
+#if 0
+	/*
+	 * Waiting for transmitting time
+	 */
+	if ((symbols.flags & has_timestamp)) {
+			// If start time is defined and in history, rise a warning 
+		if (symbols.timestamp < now) {
+			int64_t late = (int64_t)(now - symbols.timestamp);
+			if (symbols.flags & VectorFlags::no_late) {
+				cerr << "Warning: TX frame late by " << late << "ns! Discarding it!" << endl;
+				state = Idle;
+				symbols.clear();
 				return;
+			}
+			else
+				cerr << "Warning: TX frame late by " << late << "ns" << endl;
 		}
 
-		// Update the mixer NCO on the correct frequency
-		modemcf_reset(l_mod);
-		nco_crcf_reset(l_nco);
-		const float resamp_rate = resamp_crcf_get_rate(l_resamp);
-		nco_crcf_set_frequency(l_nco, nco_1Hz * (conf.center_frequency + conf.frequency_offset) / resamp_rate);
-		resamp_crcf_reset(l_resamp);
-
-		state = Transmitting;
-
+		// If start time is in future, don't start sample generation yet
+		const Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity());
+		if (symbols.timestamp > time_end)
+			return;
 	}
+#endif
 
-	if (state == Transmitting) {
-		/*
-		 * Transmitting/generating samples
-		 */
-		
+#ifdef PRECISE_TIMING
+	// Generate zero samples for even more precise timing
+	size_t silence_symbols = (size_t)floor((double)(now - symbols.timestamp) / sample_ns);
+	if (silence_symbols > 0 && silence_symbols < samples.capacity()) {
+		for (size_t i = 0; i < silence_symbols; i++)
+			co_yield 0.0f;
+	}
+#endif
 
-		while (1) {
+	SampleVector mod_samples;
 
-			// Copy samples from modulator output to output sample buffer
-			if (mod_i < mod_samples.size()) {
+	// Update the mixer NCO on the correct frequency
+	modemcf_reset(l_mod);
+	nco_crcf_reset(l_nco);
+	const float resamp_rate = resamp_crcf_get_rate(l_resamp);
+	nco_crcf_set_frequency(l_nco, nco_1Hz * (conf.center_frequency + conf.frequency_offset) / resamp_rate);
+	resamp_crcf_reset(l_resamp);
 
-				size_t cpy = min(left, mod_samples.size() - mod_i);
-				for (size_t i = 0; i < cpy; i++)
-					*write_ptr++ = mod_samples[mod_i++];
-				left -= cpy;
+	/*
+	 * Transmitting/generating samples from symbols
+	 */
+	while (1) {
 
-				// Output buffer full?
-				if (left == 0) {
-					samples.resize(samples.capacity());
-					break;
-				}
+		gen.sourceSymbols(symbols);
+		if (symbols.empty())
+			break;
+
+		for (size_t si = 0; si < symbols.size(); si++) {
+
+			// Calculate complex symbol from integer symbol
+			Complex complex_symbol;
+			modemcf_modulate(l_mod, symbols[si], &complex_symbol);
+
+			// Mix up the samples
+			Complex carrier;
+			mod_samples.resize(mod_rate);
+			for (unsigned int i = 0; i < mod_rate; i++) {
+				// Generate carrier
+				nco_crcf_step(l_nco);
+				nco_crcf_cexpf(l_nco, &carrier);
+
+				// Mix up the complex symbol
+				mod_samples[i] = complex_symbol * carrier;
 			}
 
-			// Fill the modulator output buffer
-			modulateSamples(symbols[symbols_i]);
+			// Interpolate to final sample rate
+			unsigned int num_written = 0;
+			resamp_crcf_execute_block(l_resamp, mod_samples.data(), mod_samples.size(), mod_samples.data(), &num_written);
+			mod_samples.resize(num_written);
 
-#if 1
 			// Calculate amplitude ramp up
-			if ((symbols.flags & start_of_burst) && symbols_i < conf.ramp_up_duration) {
+			if ((symbols.flags & start_of_burst) && si < conf.ramp_up_duration) {
 				const size_t ramp_duration = conf.ramp_up_duration * mod_rate;
-				const size_t hamming_window_start = symbols_i * mod_rate;
+				const size_t hamming_window_start = si * mod_rate;
 				const size_t hamming_window_len = 2 * ramp_duration;
-				//cout << "Ramp up " << ramp_duration << " " << hamming_window_start << " " << hamming_window_len << endl;
 				for (unsigned int i = 0; i < mod_samples.size(); i++)
 					mod_samples[i] *= hamming(hamming_window_start + i, hamming_window_len); // TODO: liquid_hamming
 			}
-#endif
 
-			symbols_i++;
-			if (symbols_i > symbols.size()) {
-
-				bool end_of_burst = (symbols.flags & end_of_burst) != 0;
-				symbols.clear();
-
-				// Try to source new symbols
-				if (end_of_burst == 0) {
-					Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity());
-					sourceSymbols.emit(symbols, time_end);
-					if (symbols.size() == 0)
-						cerr << "Symbol buffer underrun!" << endl;
-				}
-
-				// End of burst
-				if (symbols.size() == 0) {
-					state = Trailer;
-					symbols_i = 0;
-					break;
-				}
-			}
-
+			co_yield mod_samples;
 		}
 
+		if (symbols.flags & end_of_burst)
+			break;
+
+		symbols.clear();
 	}
 
-	if (state == Trailer) {
-		/*
-		 * Generating random symbols to
-		 */
 
-		if (mod_samples.size() == 0) {
-			size_t trailer_length = resamp_crcf_get_delay(l_resamp); // [symbols]
+	/*
+	 * Generating random symbols to
+	 */
+	size_t trailer_length = resamp_crcf_get_delay(l_resamp); // [symbols]
+	mod_samples.resize(trailer_length);
+	for (size_t i = 0; i < trailer_length; i++)
+		mod_samples[i] = 0.0f;
 
-			Sample mod_output[trailer_length];
-			for (size_t i = 0; i < trailer_length; i++) 
-				mod_output[i] = 0.0f;
+	unsigned int num_written = 0;
+	resamp_crcf_execute_block(l_resamp, mod_samples.data(), mod_samples.size(), mod_samples.data(), &num_written);
+	mod_samples.resize(num_written);
+	co_yield mod_samples;
 
-			unsigned int num_written = 0;
-			resamp_crcf_execute_block(l_resamp, mod_output, trailer_length, mod_samples.data(), &num_written);
-			mod_samples.resize(num_written);
-			mod_i = 0;
-		}
-
-		// Copy samples from modulator output to output sample buffer
-		if (mod_i < mod_samples.size()) {
-
-			size_t cpy = min(left, mod_samples.size() - mod_i);
-			for (size_t i = 0; i < cpy; i++)
-				*write_ptr++ = mod_samples[mod_i++];
-			left -= cpy;
-
-			if (mod_i != mod_samples.size()) {
-				samples.resize(samples.capacity());
-				return;
-			}
-		}
-
-		// End of burst 
-		symbols.flags |= end_of_burst;
-		samples.resize(samples.capacity() - left);
-		reset();
-	}
+	reset();
 }
 
 void PSKModulator::setFrequencyOffset(float frequency_offset) {
