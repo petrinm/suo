@@ -77,16 +77,15 @@ void PSKModulator::reset() {
 }
 
 
-void PSKModulator::sourceSamples(SampleVector& samples, Timestamp now) {
-
-	// Source new symbols
-	Timestamp time_end = now + (Timestamp)(sample_ns * samples.capacity()) - filter_delay;
-	sourceSymbols.emit(symbols, time_end);
-
+SampleGenerator PSKModulator::generateSamples(Timestamp now) {
+	symbol_gen = generateSymbols.emit(now);
+	if (symbol_gen.running())
+		return sampleGenerator();
+	return SampleGenerator();
 }
 
 
-SampleGenerator PSKModulator::sourceGenerator(SymbolGenerator& gen)
+SampleGenerator PSKModulator::sampleGenerator()
 {
 
 #if 0
@@ -135,9 +134,9 @@ SampleGenerator PSKModulator::sourceGenerator(SymbolGenerator& gen)
 	/*
 	 * Transmitting/generating samples from symbols
 	 */
-	while (1) {
+	while (symbol_gen.running()) {
 
-		gen.sourceSymbols(symbols);
+		symbol_gen.sourceSymbols(symbols);
 		if (symbols.empty())
 			break;
 

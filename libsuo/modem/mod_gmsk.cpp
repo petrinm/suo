@@ -97,21 +97,14 @@ void GMSKModulator::reset()
 }
 
 
-void GMSKModulator::sourceSamples(SampleVector& samples, Timestamp now)
+SampleGenerator GMSKModulator::generateSamples(Timestamp now)
 {
-	if (sample_gen.running()) {
-		// Source more samples from the generator
-		sample_gen.sourceSamples(samples);
+	symbol_gen = generateSymbols.emit(now);
+	if (symbol_gen.running()) {
+		return sampleGenerator();
+		//return sample_gen;
 	}
-	else {
-		// Try to source more samples
-		symbols.clear();
-		sourceSymbols.emit(symbols, now);
-		if (symbols.empty() == false) {
-			sample_gen = sampleGenerator();
-			sample_gen.sourceSamples(samples);
-		}
-	}
+	return SampleGenerator();
 }
 
 
@@ -168,7 +161,7 @@ SampleGenerator GMSKModulator::sampleGenerator()
 	 */
 	while (1) {
 
-		//gen.sourceSymbols(symbols);
+		symbol_gen.sourceSymbols(symbols);
 		if (symbols.empty())
 			break;
 

@@ -54,22 +54,29 @@ public:
 	explicit GMSKModulator(const Config& conf = Config());
 
 	~GMSKModulator();
-	
+
+	GMSKModulator(const GMSKModulator&) = delete;
+	GMSKModulator& operator=(const GMSKModulator&) = delete;
+
+
+	/* */
 	void reset();
 
-	void sourceSamples(SampleVector& samples, Timestamp now);
+	/* */
+	SampleGenerator generateSamples(Timestamp now);
 
-	void setFrequency(float frequency);
+	/* */
+	SourcePort<SymbolGenerator, Timestamp> generateSymbols;
+
+	/* */
 	void setFrequencyOffset(float frequency_offset);
 
-	Port<SymbolVector&, Timestamp> sourceSymbols;
 
 private:
 	SampleGenerator sampleGenerator();
 
 	/* Configuration */
 	Config conf;
-	uint32_t symrate;           // integer symbol rate
 	
 	Timestamp sample_ns;        // Sample duration in ns
 	unsigned int mod_rate;      // GMSK modulator samples per symbols rate

@@ -125,22 +125,18 @@ void FSKModulator::modulateSamples(Symbol symbol) {
 }
 
 
-void FSKModulator::sourceSamples(SampleVector& samples, Timestamp timestamp) {
-
+SampleGenerator FSKModulator::generateSamples(Timestamp now)
+{
+	symbol_gen = generateSymbols.emit(now);
+	if (symbol_gen.running())
+		return sampleGenerator();
+	return SampleGenerator();
 }
 
-
-SampleGenerator FSKModulator::sourceSamples(Timestamp now)
+SampleGenerator FSKModulator::sampleGenerator()
 {
-	/*
-	 * Idle (check for now incoming frames)
-	 */
-	const Timestamp time_end = now; // + (Timestamp)(sample_ns * samples.capacity());
-	sourceSymbols.emit(symbols, time_end);
 
-	if (symbols.empty())
-		co_return;
-
+#if 0
 	/*
 	 * Waiting for transmitting time
 	 */
@@ -161,18 +157,19 @@ SampleGenerator FSKModulator::sourceSamples(Timestamp now)
 		if (symbols.timestamp > time_end)
 			co_return;
 	}
+#endif
 
 	nco_crcf_reset(l_nco);
 	nco_crcf_set_frequency(l_nco, nco_1Hz * (conf.center_frequency + conf.frequency_offset));
 	symbols.flags |= VectorFlags::start_of_burst;
 
 	/*
-		* Transmitting/generating samples
-		*/
+	 * Transmitting/generating samples
+	 */
 	
-	while (1) {
+	while (symbol_gen.running()) {
 
-		//gen.sourceSymbols(symbols);
+		symbol_gen.sourceSymbols(symbols);
 		if (symbols.empty())
 			break;
 

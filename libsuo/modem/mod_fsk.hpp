@@ -55,18 +55,27 @@ public:
 
 	~FSKModulator();
 
+	FSKModulator(const FSKModulator&) = delete;
+	FSKModulator& operator=(const FSKModulator&) = delete;
+
+
+	/* */
 	void reset();
 
-	void sourceSamples(SampleVector& samples, Timestamp timestamp);
-	
-	Port<SymbolVector&, Timestamp> sourceSymbols;
+	/* */
+	SampleGenerator generateSamples(Timestamp now);
 
+	/* */
+	SourcePort<SymbolGenerator, Timestamp> generateSymbols;
+
+	/* */
 	void setFrequencyOffset(float frequency_offset);
 
 private:
 
 	void modulateSamples(Symbol symbol);
-	SampleGenerator sourceSamples(Timestamp now);
+	SampleGenerator sampleGenerator();
+
 	/* Configuration */
 	Config conf;
 	float sample_ns;  // Sample duration in ns
@@ -80,6 +89,7 @@ private:
 	/* State */
 	enum State state;
 	SymbolVector symbols;
+	SymbolGenerator symbol_gen;
 	size_t symbols_i;
 	SampleVector mod_samples;
 	unsigned int mod_i;

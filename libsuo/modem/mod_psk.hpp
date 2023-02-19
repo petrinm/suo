@@ -41,15 +41,17 @@ public:
 	
 	void reset();
 
-	void sourceSamples(SampleVector& samples, Timestamp now);
+	//void sourceSamples(SampleVector& samples, Timestamp now);
+	SampleGenerator generateSamples(Timestamp now);
 
 	void setFrequencyOffset(float frequency_offset);
 
-	Port<SymbolVector&, Timestamp> sourceSymbols;
+	SourcePort<SymbolGenerator, Timestamp> generateSymbols;
+	//Port<SymbolVector&, Timestamp> sourceSymbols;
 	
 private:
 	
-	SampleGenerator sourceGenerator(SymbolGenerator& gen);
+	SampleGenerator sampleGenerator(); // SymbolGenerator& gen);
 
 	/* Configuration */
 	Config conf;
@@ -60,6 +62,7 @@ private:
 	
 	/* State */
 	SymbolVector symbols;
+	SymbolGenerator symbol_gen;
 
 	/* liquid-dsp and suo objects */
 	modemcf l_mod;
