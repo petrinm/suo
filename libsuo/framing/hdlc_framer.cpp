@@ -71,23 +71,15 @@ Symbol HDLCFramer::scramble_bit(Symbol bit) {
 }
 
 
-void HDLCFramer::sourceSymbols(SymbolVector& symbols, Timestamp now) {
-
-	if (symbol_gen.running()) {
-		symbol_gen.sourceSymbols(symbols);
-	}
-	else {
-		// Try to source a frame
-		sourceFrame.emit(frame, now);
-		if (frame.empty() == false) {
-			symbol_gen = generateSymbols();
-			symbol_gen.sourceSymbols(symbols);
-		}
-	}
+SymbolGenerator HDLCFramer::generateSymbols(Timestamp now) {
+	sourceFrame.emit(frame, now);
+	if (frame.empty() == false)
+		return symbolGenerator();
+	return SymbolGenerator();
 }
 
 
-SymbolGenerator HDLCFramer::generateSymbols() // Frame& frame
+SymbolGenerator HDLCFramer::symbolGenerator() // Frame& frame
 {
 
 	/* Append CRC to end of frame */

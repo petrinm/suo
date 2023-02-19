@@ -62,7 +62,7 @@ void GolayDeframer::findSyncword(Symbol bit, Timestamp now)
 	if (sync_errors > conf.sync_threshold)
 		return;
 
-	// cout << "SYNC DETECTED! " << sync_errors << endl;
+	//cout << "SYNC DETECTED! " << sync_errors << endl;
 
 	/* Syncword found, start saving bits when next bit arrives */
 	bit_idx = 0;
@@ -94,7 +94,7 @@ void GolayDeframer::receiveHeader(Symbol bit, Timestamp now)
 	int golay_errors = decode_golay24(&coded_len);
 	if (golay_errors < 0)
 	{
-		cout << "Golay decode failed!" << endl;
+		cout << "Golay decode failed! " << endl;
 		// TODO: Increase some counter
 		reset();
 		return;
@@ -105,6 +105,7 @@ void GolayDeframer::receiveHeader(Symbol bit, Timestamp now)
 
 	// Receive only packets which matches to filter
 	if ((coded_len & 0xF00) != conf.header_filter) {
+		cout << "Header filter!" << endl;
 		reset();
 		return;
 	}
@@ -142,12 +143,12 @@ void GolayDeframer::receivePayload(Symbol bit, Timestamp now)
 	latest_bits = 0;
 	bit_idx = 0;
 
+	// Receiving the frame completed?
 	if (frame.data.size() < frame_len)
 		return;
 		
-	// Receiving the frame completed
-	state = Syncing;
 	frame.setMetadata("completed_timestamp", now);
+	frame.setMetadata("completed_utc_timestamp", getISOCurrentTimestamp());
 
 	if (conf.skip_viterbi == false && (coded_len & GolayFramer::use_viterbi_flag) != 0)
 	{
@@ -168,21 +169,23 @@ void GolayDeframer::receivePayload(Symbol bit, Timestamp now)
 	{
 		/* Decode Reed-Solomon */
 		try {
-			rs.decode(frame.data);
+			unsigned int bytes_corrected = rs.decode(frame.data);
+			unsigned int bits_corrected = 0; // count_bit_errors();
+			frame.setMetadata("rs_bytes_corrected", bytes_corrected);
+			frame.setMetadata("rs_bits_corrected", bits_corrected);
 		}
 		catch (ReedSolomonUncorrectable& e) {
-			// TODO: Do some 
-			cerr << "Reed-Solomon not yet implemented" << endl;
+			// TODO: Increment statistics
+			cerr << "Reed-Solomon uncorrectable" << endl;
 			reset();
 			return;
 		}
 	}
 
 	syncDetected.emit(false, now);
-	
 	sinkFrame.emit(frame, now);
 
-	frame.clear();
+	reset();
 }
 
 

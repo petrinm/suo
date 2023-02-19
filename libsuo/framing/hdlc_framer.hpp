@@ -35,17 +35,19 @@ public:
 	HDLCFramer(const HDLCFramer&) = delete;
 	HDLCFramer& operator=(const HDLCFramer&) = delete;
 
-
+	/* */
 	void reset();
 
-	void sourceSymbols(SymbolVector& symbols, Timestamp now);
+	/* */
+	SymbolGenerator generateSymbols(Timestamp now);
 
+	/* */
 	Port<Frame&, Timestamp> sourceFrame;
 
 private:
 
 	/* Coroutine for geneting symbol sequence */
-	SymbolGenerator generateSymbols();
+	SymbolGenerator symbolGenerator();
 
 	/* Bit scrambler */
 	Symbol scramble_bit(Symbol bit);

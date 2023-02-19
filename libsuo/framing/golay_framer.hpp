@@ -55,17 +55,16 @@ public:
 
 	/*
 	 */
-	void sourceSymbols(SymbolVector& symbols, Timestamp now);
-
-	/*
-	 */
-	SymbolGenerator generateSymbols(Frame& frame);
+	SymbolGenerator generateSymbols(Timestamp now);
 
 	/*
 	 */
 	Port<Frame&, Timestamp> sourceFrame;
 
 private:
+	
+	SymbolGenerator symbolGenerator(Frame& frame);
+
 	/* Configuration */
 	Config conf;
 	ReedSolomon rs;

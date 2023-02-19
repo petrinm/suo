@@ -45,25 +45,15 @@ void GolayFramer::reset() {
 }
 
 
-void GolayFramer::sourceSymbols(SymbolVector& symbols, Timestamp now)
-{
-	if (symbol_gen.running()) {
-		// Source more symbols from generator
-		symbol_gen.sourceSymbols(symbols);
-	}
-	else {
-		// Try to source a new frame
-		frame.clear();
-		sourceFrame.emit(frame, now);
-		if (frame.empty() == false) {
-			symbol_gen = generateSymbols(frame);
-			symbol_gen.sourceSymbols(symbols);
-		}
-	}
+SymbolGenerator GolayFramer::generateSymbols(Timestamp now) {
+	sourceFrame.emit(frame, now);
+	if (frame.empty() == false)
+		return symbolGenerator(frame);
+	return SymbolGenerator();
 }
 
 
-SymbolGenerator GolayFramer::generateSymbols(Frame& frame)
+SymbolGenerator GolayFramer::symbolGenerator(Frame& frame)
 {
 	/* Generate preamble sequence */
 	for (size_t i = 0; i < conf.preamble_len; i++)
@@ -72,8 +62,20 @@ SymbolGenerator GolayFramer::generateSymbols(Frame& frame)
 	/* Append syncword */
 	co_yield word_to_lsb_bits(conf.syncword, conf.syncword_len);
 
-	/* Append Golay coded length (+coding flags) */
-	uint32_t coded_len = frame.size();
+
+	/* Calculate Reed Solomon */
+	ByteVector data_buffer = frame.data;
+	if (conf.use_rs)
+		rs.encode(data_buffer);
+
+	/* Scrambler the bytes */
+	if (conf.use_randomizer) {
+		for (size_t i = 0; i < data_buffer.size(); i++)
+			data_buffer[i] ^= ccsds_randomizer[i];
+	}
+
+	/* Output Golay coded length (+coding flags) */
+	uint32_t coded_len = data_buffer.size();
 	if (conf.use_rs) coded_len |= GolayFramer::use_reed_solomon_flag;
 	if (conf.use_randomizer) coded_len |= GolayFramer::use_randomizer_flag;
 	if (conf.use_viterbi) coded_len |= GolayFramer::use_viterbi_flag;
@@ -81,16 +83,6 @@ SymbolGenerator GolayFramer::generateSymbols(Frame& frame)
 	encode_golay24(&coded_len);
 	co_yield word_to_lsb_bits(coded_len, 24);
 
-	/* Calculate Reed Solomon */
-	ByteVector data_buffer = frame.data;
-	if (conf.use_rs)
-		rs.encode(data_buffer);
-	
-	/* Scrambler the bytes */
-	if (conf.use_randomizer) {
-		for (size_t i = 0; i < frame.size(); i++)
-			data_buffer[i] ^= ccsds_randomizer[i];
-	}
 
 	/* Viterbi decode all bits */
 	if (conf.use_viterbi) {

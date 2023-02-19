@@ -32,23 +32,15 @@ void SyncwordFramer::reset() {
 }
 
 
-void SyncwordFramer::sourceSymbols(SymbolVector& symbols, Timestamp now) {
-
-	if (symbol_gen.running()) {
-		// Get a frame
-		if (frame.empty()) {
-		sourceFrame.emit(frame, now);
-			symbol_gen = generateSymbols(frame);
-			symbol_gen.sourceSymbols(symbols);
-		}
-	}
-	else {
-		symbol_gen.sourceSymbols(symbols);
-	}
-
+SymbolGenerator SyncwordFramer::generateSymbols(Timestamp now) {
+	sourceFrame.emit(frame, now);
+	if (frame.empty() == false)
+		return symbolGenerator(frame);
+	return SymbolGenerator();
 }
 
-SymbolGenerator SyncwordFramer::generateSymbols(const Frame& frame)
+
+SymbolGenerator SyncwordFramer::symbolGenerator(const Frame& frame)
 {
 
 	/* Generate preamble sequence */

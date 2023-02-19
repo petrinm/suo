@@ -38,17 +38,19 @@ public:
 
 	/*
 	 */
-	void sourceSymbols(SymbolVector& symbols, Timestamp t);
+	SymbolGenerator generateSymbols(Timestamp now);
 
-	/*
-	 */
-	SymbolGenerator generateSymbols(const Frame& frame);
 
 	/*
 	 */
 	Port<Frame&, Timestamp> sourceFrame;
 
 private:
+
+	/*
+	 */
+	SymbolGenerator symbolGenerator(const Frame& frame);
+
 	Config conf;
 
 	/* Framer state */
