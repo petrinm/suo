@@ -54,6 +54,8 @@ public:
 		flags = none;
 		timestamp = 0;
 	}
+
+	operator bool() { return empty() == false; }
 };
 
 class SymbolVector : public std::vector<Symbol>
@@ -78,6 +80,7 @@ public:
 		timestamp = 0;
 	}
 
+	operator bool() { return empty() == false; }
 
 };
 

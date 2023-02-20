@@ -35,7 +35,6 @@ public:
 	private:
 
 		SymbolVector* out;
-		//SymbolGenerator gen;
 		SymbolVector::const_iterator input_iter, input_end;
 		std::exception_ptr exception_;
 		
@@ -62,6 +61,8 @@ public:
 	/* Source new symbols from the generator */
 	void sourceSymbols(SymbolVector& out);
 	void sourceSymbols(std::insert_iterator<SymbolVector> inserter);
+
+	operator bool() { return running(); }
 
 	// Range-based for loop support.
 	class Iterator {
@@ -152,7 +153,6 @@ public:
 	private:
 
 		SampleVector* out;
-		//SampleGenerator gen;
 		SampleVector::const_iterator input_iter, input_end;
 		std::exception_ptr exception_;
 
@@ -176,7 +176,8 @@ public:
 	bool running() const;
 
 	void sourceSamples(SampleVector& out);
-	//void sourceSamples(SampleVector& out);
+	
+	operator bool() { return running(); }
 
 private:
 	handle_type coro_handle;
@@ -186,5 +187,8 @@ private:
 	
 };
 
+
+SymbolGenerator generator_from_vector(const SymbolVector& symbols);
+SampleGenerator generator_from_vector(const SampleVector& samples);
 
 }; // namespace suo
