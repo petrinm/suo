@@ -43,7 +43,12 @@ AMQPInterface::AMQPInterface(const Config& conf_):
 			});
 
 		});
+
+		// TODO: Reconnect automatically after disconnection
 	}
+
+	auto now = std::chrono::steady_clock::now();
+	next_heartbeat = now + std::chrono::duration<long int>(heartbeat_interval);
 
 	//.onSuccess(startCb).onCancelled(cancelledCb).onError(errorCb);
 }
@@ -54,11 +59,20 @@ AMQPInterface::~AMQPInterface() {
 }
 
 
-void AMQPInterface::tick(suo::Timestamp now)
+void AMQPInterface::tick(Timestamp _now)
 {
-	(void)now;
+	(void)_now;
 	for (int fd : fds)
 		connection.process(fd, AMQP::readable | AMQP::writable);
+
+	// Check hearthbeat timeout
+	auto now = std::chrono::steady_clock::now();
+	const auto timeout = std::chrono::duration<double, std::micro>(next_heartbeat - now);
+	if (timeout.count() <= 0) {
+		//cout << "AMQP heartbeat " << endl;
+		connection.heartbeat();
+		next_heartbeat = now + std::chrono::duration<long int>(heartbeat_interval);
+	}
 }
 
 void AMQPInterface::sinkFrame(const Frame& frame, Timestamp timestamp) {
@@ -98,7 +112,7 @@ void AMQPInterface::message_callback(const AMQP::Message& message, uint64_t deli
 void AMQPInterface::onAttached(AMQP::TcpConnection* connection)
 {
 	(void)connection;
-	cout << "AMQP Attached!" << endl;
+	//cout << "AMQP Attached!" << endl;
 }
 
 void AMQPInterface::onConnected(AMQP::TcpConnection* connection)
@@ -141,11 +155,19 @@ void AMQPInterface::monitor(AMQP::TcpConnection* connection, int fd, int flags)
 {
 	(void)connection;
 	//cout << "AMQP Monitor " << fd << " " << flags << endl;
-
 	if (flags == 0)
 		fds.erase(fd);
 	else
 		fds.insert(fd);
+}
+
+uint16_t AMQPInterface::onNegotiate(AMQP::TcpConnection* connection, uint16_t interval)
+{
+	//cout << "AMQP negotiate " << interval << endl;
+	heartbeat_interval = interval - 2;
+	auto now = std::chrono::steady_clock::now();
+	next_heartbeat = now + std::chrono::duration<long int>(heartbeat_interval);
+	return interval;
 }
 
 #endif

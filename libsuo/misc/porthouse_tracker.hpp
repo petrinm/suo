@@ -4,6 +4,7 @@
 
 #include <set>
 #include <string>
+#include <chrono>
 
 #include "suo.hpp"
 
@@ -30,16 +31,18 @@ public:
 	};
 
 	explicit PorthouseTracker(const Config &conf = Config());
-	void tick(suo::Timestamp now);
+	void tick(Timestamp now);
 
-	suo::Port<float> setUplinkFrequency;
-	suo::Port<float> setDownlinkFrequency;
+	Port<float> setUplinkFrequency;
+	Port<float> setDownlinkFrequency;
 
 private:
 	Config conf;
 	std::set<int> fds;
 	AMQP::TcpConnection connection;
 	AMQP::TcpChannel channel;
+	unsigned int heartbeat_interval;
+	std::chrono::time_point<std::chrono::steady_clock> next_heartbeat;
 
 	/* AMQP message callback */
 	void message_callback(const AMQP::Message &message, uint64_t deliveryTag, bool redelivered);
@@ -53,6 +56,7 @@ private:
 	virtual void onLost(AMQP::TcpConnection *connection) override;
 	virtual void onDetached(AMQP::TcpConnection *connection) override;
 	virtual void monitor(AMQP::TcpConnection *connection, int fd, int flags) override;
+	virtual uint16_t onNegotiate(AMQP::TcpConnection* connection, uint16_t interval) override;
 };
 
 }; // namespace suo

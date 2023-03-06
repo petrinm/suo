@@ -20,7 +20,8 @@ PorthouseTracker::Config::Config() {
 PorthouseTracker::PorthouseTracker(const Config& conf_) :
 	conf(conf_),
 	connection(this, AMQP::Address(conf.amqp_url)),
-	channel(&connection)
+	channel(&connection),
+	heartbeat_interval(30)
 {
 
 	channel.onError([](const char *message) {
@@ -35,14 +36,28 @@ PorthouseTracker::PorthouseTracker(const Config& conf_) :
 			message_callback(message, deliveryTag, redelivered);
 		});
 	});
+	
+	auto now = std::chrono::steady_clock::now();
+	next_heartbeat = now + std::chrono::duration<long int>(heartbeat_interval);
+
+	// TODO: Reconnect automatically after disconnection
 
 }
 
-void PorthouseTracker::tick(suo::Timestamp now)
+void PorthouseTracker::tick(Timestamp _now)
 {
-	(void)now;
+	(void)_now;
 	for (int fd : fds)
 		connection.process(fd, AMQP::readable | AMQP::writable);
+
+	// Check hearthbeat timeout
+	auto now = std::chrono::steady_clock::now();
+	const auto timeout = std::chrono::duration<double, std::micro>(next_heartbeat - now);
+	if (timeout.count() <= 0) {
+		//cout << "AMQP heartbeat " << endl;
+		connection.heartbeat();
+		next_heartbeat = now + std::chrono::duration<long int>(heartbeat_interval);
+	}
 }
 
 /*
@@ -52,8 +67,8 @@ void PorthouseTracker::message_callback(const AMQP::Message &message, uint64_t d
 	(void)deliveryTag;
 	(void)redelivered;
 
-	cerr << "message_callback" << message.exchange() << " " << message.routingkey() << endl;
-	cerr << string_view(message.body(), message.bodySize()) << endl;
+	//cerr << "message_callback " << message.exchange() << " " << message.routingkey() << endl;
+	//cerr << string_view(message.body(), message.bodySize()) << endl;
 
 	// Parse JSON object from the message
 	nlohmann::json dict;
@@ -74,20 +89,20 @@ void PorthouseTracker::message_callback(const AMQP::Message &message, uint64_t d
 	float doppler = conf.center_frequency * (relative_velocity / 299792458.0);
 
 #if 0
-	cout << "Relative Velocity" << relative_velocity << " m/s; ";
-	cout << "Doppler shift" << doppler << " Hz; ";
-	cout << "Uplink " << (conf.center_frequency - doppler) * 1e-6 << " MHz; ";
-	cout << "Downlink" << (conf.center_frequency + doppler) * 1e-6 << " MHz" << endl;
+	cout << "Relative Velocity" << setprecision(2) << relative_velocity << " m/s; ";
+	cout << "Doppler shift" << setprecision(1) << doppler << " Hz; ";
+	cout << "Uplink " << setprecision(3) << conf.center_frequency + doppler) * 1e-6 << " MHz; ";
+	cout << "Downlink" << setprecision(3) << (conf.center_frequency - doppler) * 1e-6 << " MHz" << endl;
 #endif
 
-	setUplinkFrequency.emit(conf.center_frequency - doppler);
-	setDownlinkFrequency.emit(conf.center_frequency + doppler);
+	setUplinkFrequency.emit(conf.center_frequency + doppler);
+	setDownlinkFrequency.emit(conf.center_frequency - doppler);
 }
 
 void PorthouseTracker::onAttached(AMQP::TcpConnection *connection)
 {
 	(void) connection;
-	cout << "AMQP Attached!" << endl;
+	//cout << "AMQP Attached!" << endl;
 }
 
 void PorthouseTracker::onConnected(AMQP::TcpConnection *connection)
@@ -135,6 +150,15 @@ void PorthouseTracker::monitor(AMQP::TcpConnection *connection, int fd, int flag
 		fds.erase(fd);
 	else 
 		fds.insert(fd);
+}
+
+uint16_t PorthouseTracker::onNegotiate(AMQP::TcpConnection* connection, uint16_t interval)
+{
+	//cout << "AMQP negotiate " << interval << endl;
+	heartbeat_interval = interval - 2;
+	auto now = std::chrono::steady_clock::now();
+	next_heartbeat = now + std::chrono::duration<long int>(heartbeat_interval);
+	return interval;
 }
 
 #endif

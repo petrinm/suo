@@ -4,6 +4,7 @@
 
 #include <set>
 #include <string>
+#include <chrono>
 
 #include "suo.hpp"
 
@@ -42,6 +43,9 @@ private:
 	AMQP::TcpConnection connection;
 	AMQP::TcpChannel channel;
 
+	unsigned int heartbeat_interval;
+	std::chrono::time_point<std::chrono::steady_clock> next_heartbeat;
+
 	std::queue<suo::Frame> frame_queue;
 
 	/* AMQP message callback */
@@ -56,6 +60,7 @@ private:
 	virtual void onLost(AMQP::TcpConnection* connection) override;
 	virtual void onDetached(AMQP::TcpConnection* connection) override;
 	virtual void monitor(AMQP::TcpConnection* connection, int fd, int flags) override;
+	virtual uint16_t onNegotiate(AMQP::TcpConnection* connection, uint16_t interval) override;
 };
 
 }; // namespace suo
