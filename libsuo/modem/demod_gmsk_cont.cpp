@@ -29,9 +29,8 @@ GMSKContinousDemodulator::Config::Config() {
 	agc_bandwidth0 = 9e-2f;
 	agc_bandwidth1 = 2e-2f;
 
-	symsync_bandwidth0 = 0.01f; // 0.01f;
-	symsync_bandwidth1 = 0.006f;
-
+	symsync_bandwidth0 = 0.01f;
+	symsync_bandwidth1 = 0.01f;
 }
 
 GMSKContinousDemodulator::GMSKContinousDemodulator(const Config& conf) :
@@ -78,9 +77,8 @@ GMSKContinousDemodulator::GMSKContinousDemodulator(const Config& conf) :
 	 * - Runs polyphase filter bank for symbol timing recovery 
 	 * - Decimates to symbol rate
 	 */
-	l_symsync = symsync_crcf_create_rnyquist(LIQUID_FIRFILT_GMSKRX, conf.samples_per_symbol, conf.filter_delay, conf.bt, 32);
-	symsync_crcf_set_lf_bw(l_symsync, conf.symsync_bandwidth0 / conf.samples_per_symbol);
-
+	l_symsync = symsync_rrrf_create_rnyquist(LIQUID_FIRFILT_GMSKRX, conf.samples_per_symbol, conf.filter_delay, conf.bt, 16);
+	symsync_rrrf_set_lf_bw(l_symsync, conf.symsync_bandwidth0 / conf.samples_per_symbol);
 
 	reset();
 }
@@ -89,7 +87,7 @@ GMSKContinousDemodulator::GMSKContinousDemodulator(const Config& conf) :
 GMSKContinousDemodulator::~GMSKContinousDemodulator()
 {
 	agc_crcf_destroy(l_agc);
-	symsync_crcf_destroy(l_symsync);
+	symsync_rrrf_destroy(l_symsync);
 }
 
 
@@ -134,16 +132,15 @@ void GMSKContinousDemodulator::sinkSamples(const SampleVector& samples, Timestam
 	Sample null;
 
 
-
 	for (size_t si = 0; si < samples.size(); si++) {
 		unsigned nsamp2 = 0, si2;
 		Sample s = samples[si];
+
 
 		/* Downconvert and resample one input sample at a time */
 		nco_crcf_step(l_nco);
 		nco_crcf_mix_down(l_nco, s, &s);
 		resamp_crcf_execute(l_resamp, s, samples2, &nsamp2);
-
 
 		/* Process output from the resampler one sample at a time */
 		for(si2 = 0; si2 < nsamp2; si2++) {
@@ -158,7 +155,7 @@ void GMSKContinousDemodulator::sinkSamples(const SampleVector& samples, Timestam
 			float phase_error = arg(conj(x_primee) * s2) * k_ref;
 			x_primee = s2;
 			nco_crcf_mix_up(l_nco, x_primee, &x_primee);
-			nco_crcf_pll_step(l_nco, -100000 * phase_error);
+			nco_crcf_pll_step(l_nco, phase_error);
 			nco_crcf_mix_down(l_nco, x_primee, &x_primee);
 #else
 			/* Update PLL feedback (Costas loop for QPSK) */
@@ -169,7 +166,6 @@ void GMSKContinousDemodulator::sinkSamples(const SampleVector& samples, Timestam
 			nco_crcf_pll_step(l_nco, -100* phase_error);
 #endif
 
-
 			/* Clamp the PLL frequency between min and max */
 			float freq = nco_crcf_get_frequency(l_nco);
 			if (freq > freq_max)
@@ -178,26 +174,27 @@ void GMSKContinousDemodulator::sinkSamples(const SampleVector& samples, Timestam
 				nco_crcf_set_frequency(l_nco, freq_min);
 
 
+			/* Quadrature FM-demodulation */
+			float phi = arg(conj(x_prime) * s2) * k_ref;
+			x_prime = s2;
+
 			/* Run symbols synchronization.
 			 * This has also gaussian undistortion and decimation */
-			Complex synced_symbol;
+			float synced_symbol;
 			unsigned int output_symbols = 0;
-			symsync_crcf_execute(l_symsync, &s2, 1, &synced_symbol, &output_symbols);
+			symsync_rrrf_execute(l_symsync, &phi, 1, &synced_symbol, &output_symbols);
+
 			if (output_symbols == 0)
 				continue;
 
 			assert(output_symbols == 1);
-
-			/* Quadrature FM-demodulation */
-			float phi = arg(conj(x_prime) * synced_symbol) * k_ref;
-			x_prime = synced_symbol;
 
 		
 			/* Process one output symbol from synchronizer */
 			Timestamp symbol_time = now + si * sample_ns;
 			//now -= conf.filter_delay * resampint; // or / resamprate
 
-			Symbol decision = (phi >= 0) ? 1 : 0;
+			Symbol decision = (synced_symbol >= 0) ? 1 : 0;
 			//cout << (int)decision << " ";
 			sinkSymbol.emit(decision, symbol_time);
 
@@ -227,15 +224,13 @@ void GMSKContinousDemodulator::lockReceiver(bool locked, Timestamp now) {
 		setMetadata.emit("rssi", agc_crcf_get_rssi(l_agc));
 		setMetadata.emit("bg_rssi", agc_crcf_get_rssi(l_bg_agc));
 
-		symsync_crcf_set_lf_bw(l_symsync, conf.symsync_bandwidth1 / conf.samples_per_symbol);
-		//symsync_rrrf_set_lf_bw(l_symsync, conf.symsync_bandwidth1 / conf.samples_per_symbol);
+		symsync_rrrf_set_lf_bw(l_symsync, conf.symsync_bandwidth1 / conf.samples_per_symbol);
 		nco_crcf_pll_set_bandwidth(l_nco, conf.pll_bandwidth1 * nco_1Hz);
 		agc_crcf_set_bandwidth(l_agc, conf.agc_bandwidth1 / conf.samples_per_symbol);
 		agc_crcf_lock(l_bg_agc);
 	}
 	else {
-		symsync_crcf_set_lf_bw(l_symsync, conf.symsync_bandwidth0 / conf.samples_per_symbol);
-		//symsync_rrrf_set_lf_bw(l_symsync, conf.symsync_bandwidth0 / conf.samples_per_symbol);
+		symsync_rrrf_set_lf_bw(l_symsync, conf.symsync_bandwidth0 / conf.samples_per_symbol);
 		nco_crcf_pll_set_bandwidth(l_nco, conf.pll_bandwidth0 * nco_1Hz);
 		agc_crcf_set_bandwidth(l_agc, conf.agc_bandwidth0 / conf.samples_per_symbol);
 		agc_crcf_unlock(l_bg_agc);
@@ -244,7 +239,6 @@ void GMSKContinousDemodulator::lockReceiver(bool locked, Timestamp now) {
 
 
 void GMSKContinousDemodulator::setFrequencyOffset(float frequency_offset) {
-	cerr << "Downlink frequency offset " << frequency_offset;
 	conf.frequency_offset = frequency_offset;
 	conf_dirty = true;
 }

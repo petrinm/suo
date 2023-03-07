@@ -32,7 +32,6 @@ GMSKModulator::GMSKModulator(const Config& conf) :
 
 	const float samples_per_symbol = conf.sample_rate / conf.symbol_rate;
 	mod_rate = (unsigned int)samples_per_symbol + 1;
-	mod_max_samples = (unsigned int)ceil(samples_per_symbol);
 	const float resamp_rate = samples_per_symbol / (float)mod_rate;
 
 	if (mod_rate < 3)
@@ -41,7 +40,7 @@ GMSKModulator::GMSKModulator(const Config& conf) :
 	/*
 	 * Buffers
 	 */
-	symbols.reserve(0x900);
+	symbols.reserve(64);
 
 	/*
 	 * Init GMSK modulator
@@ -100,10 +99,8 @@ void GMSKModulator::reset()
 SampleGenerator GMSKModulator::generateSamples(Timestamp now)
 {
 	symbol_gen = generateSymbols.emit(now);
-	if (symbol_gen.running()) {
+	if (symbol_gen.running())
 		return sampleGenerator();
-		//return sample_gen;
-	}
 	return SampleGenerator();
 }
 

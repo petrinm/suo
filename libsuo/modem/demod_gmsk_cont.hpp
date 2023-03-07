@@ -99,7 +99,7 @@ private:
 	/* liquid-dsp objects */
 	nco_crcf l_nco;
 	resamp_crcf l_resamp;
-	symsync_crcf l_symsync;
+	symsync_rrrf l_symsync;
 	agc_crcf l_agc;
 	agc_crcf l_bg_agc;
 

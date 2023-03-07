@@ -80,7 +80,6 @@ private:
 	
 	Timestamp sample_ns;        // Sample duration in ns
 	unsigned int mod_rate;      // GMSK modulator samples per symbols rate
-	unsigned int mod_max_samples;// Maximum number of samples generated from single symbol
 	float nco_1Hz;
 	unsigned int trailer_length; // Number of symbols in trailer [symbols]
 	Timestamp filter_delay;      // Total timedelay in the FIR filtering [ns]
