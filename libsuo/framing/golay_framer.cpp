@@ -20,6 +20,7 @@ GolayFramer::Config::Config() {
 	use_viterbi = false;
 	use_randomizer = true;
 	use_rs = true;
+	legacy_mode = false;
 }
 
 
@@ -46,6 +47,7 @@ void GolayFramer::reset() {
 
 
 SymbolGenerator GolayFramer::generateSymbols(Timestamp now) {
+	frame.clear();
 	sourceFrame.emit(frame, now);
 	if (frame.empty() == false)
 		return symbolGenerator(frame);
@@ -76,9 +78,11 @@ SymbolGenerator GolayFramer::symbolGenerator(Frame& frame)
 
 	/* Output Golay coded length (+coding flags) */
 	uint32_t coded_len = data_buffer.size();
-	if (conf.use_rs) coded_len |= GolayFramer::use_reed_solomon_flag;
-	if (conf.use_randomizer) coded_len |= GolayFramer::use_randomizer_flag;
-	if (conf.use_viterbi) coded_len |= GolayFramer::use_viterbi_flag;
+	if (conf.legacy_mode) {
+		if (conf.use_rs) coded_len |= GolayFramer::use_reed_solomon_flag;
+		if (conf.use_randomizer) coded_len |= GolayFramer::use_randomizer_flag;
+		if (conf.use_viterbi) coded_len |= GolayFramer::use_viterbi_flag;
+	}
 
 	encode_golay24(&coded_len);
 	co_yield word_to_lsb_bits(coded_len, 24);
@@ -95,7 +99,6 @@ SymbolGenerator GolayFramer::symbolGenerator(Frame& frame)
 		for (Byte byte: data_buffer)
 			co_yield word_to_lsb_bits(byte);
 	}
-	
 }
 
 Block* createGolayFramer(const Kwargs &args)

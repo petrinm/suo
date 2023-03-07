@@ -16,10 +16,10 @@ GolayDeframer::Config::Config() {
 	syncword = 0xC9D08A7B;
 	syncword_len = 32;
 	sync_threshold = 3;
-	header_filter = GolayFramer::use_randomizer_flag | GolayFramer::use_reed_solomon_flag;
-	skip_viterbi = false;
-	skip_randomizer = false;
-	skip_rs = false;
+	use_viterbi = false;
+	use_randomizer = false;
+	use_rs = false;
+	legacy_mode = false;
 }
 
 GolayDeframer::GolayDeframer(const Config& conf) :
@@ -89,23 +89,39 @@ void GolayDeframer::receiveHeader(Symbol bit, Timestamp now)
 	if (++bit_idx < 24)
 		return;
 
+#if 0
+	if (conf.legacy_mode == false) {
+		// If Reed Solomon in non-legacy the frame cannot be longer than 255 bytes.
+		// Thus, we can zero out the header's MSBs before decoding golay for possible sensitivity.
+		if (conf.use_rs)
+			latest_bits &= 0xFFF0FF;
+	}
+#endif
+
 	// Decode Golay code
 	coded_len = latest_bits;
 	int golay_errors = decode_golay24(&coded_len);
 	if (golay_errors < 0)
 	{
-		cout << "Golay decode failed! " << endl;
+		cerr << "Golay decode failed! " << endl;
 		// TODO: Increase some counter
 		reset();
 		return;
 	}
 
-	// The 8 least signigicant bit indicate the lenght
-	frame_len = 0xFF & coded_len;
+	// Decode frame length
+	if (conf.legacy_mode) {
+		// The 8 least signigicant bit indicate the length and 
+		// upper 4 bits are used for indicating the mode (Viterbi,Randomizer,RS).
+		frame_len = 0xFF & coded_len;
+	}
+	else {
+		frame_len = 0xFFF & coded_len;
+	}
 
-	// Receive only packets which matches to filter
-	if ((coded_len & 0xF00) != conf.header_filter) {
-		cout << "Header filter!" << endl;
+	// In any case if RS is used, the length cannot be shorter than RS number of parity bytes or longer than the RS message length. 
+	if (conf.use_rs && frame_len < (32 + 1) && frame_len > 255) {
+		cerr << "Invalid frame length!" << endl;
 		reset();
 		return;
 	}
@@ -114,7 +130,7 @@ void GolayDeframer::receiveHeader(Symbol bit, Timestamp now)
 	//frame.setMetadata("golay_coded", coded_len);
 
 	// Receive double number of bits if viterbi is used
-	if ((coded_len & GolayFramer::use_viterbi_flag) != 0) {
+	if (conf.legacy_mode ? ((coded_len & GolayFramer::use_viterbi_flag) != 0) : conf.use_viterbi)  {
 		frame_len *= 2;
 		cerr << "Viterbi not yet implemented" << endl;
 		reset();
@@ -150,7 +166,7 @@ void GolayDeframer::receivePayload(Symbol bit, Timestamp now)
 	frame.setMetadata("completed_timestamp", now);
 	frame.setMetadata("completed_utc_timestamp", getISOCurrentTimestamp());
 
-	if (conf.skip_viterbi == false && (coded_len & GolayFramer::use_viterbi_flag) != 0)
+	if (conf.legacy_mode ? ((coded_len & GolayFramer::use_viterbi_flag) != 0) : conf.use_viterbi)
 	{
 		/* Decode viterbi */
 		cerr << "Viterbi not yet implemented" << endl;
@@ -158,25 +174,27 @@ void GolayDeframer::receivePayload(Symbol bit, Timestamp now)
 		return;
 	}
 
-	if (conf.skip_randomizer == false && (coded_len & GolayFramer::use_randomizer_flag) != 0)
+	//if // U482C mode
+	if (conf.legacy_mode ? ((coded_len & GolayFramer::use_randomizer_flag) != 0) : conf.use_randomizer)
 	{
 		/* Scrambler the bytes */
 		for (size_t i = 0; i < frame.data.size(); i++)
 			frame.data[i] ^= ccsds_randomizer[i];
 	}
 
-	if (conf.skip_rs == false && (coded_len & GolayFramer::use_reed_solomon_flag) != 0)
+	if (conf.legacy_mode ? ((coded_len & GolayFramer::use_reed_solomon_flag) != 0) : conf.use_rs)
 	{
 		/* Decode Reed-Solomon */
 		try {
+			ByteVector original = frame.data;
 			unsigned int bytes_corrected = rs.decode(frame.data);
-			unsigned int bits_corrected = 0; // count_bit_errors();
+			unsigned int bits_corrected = count_bit_errors(frame.data, original);
 			frame.setMetadata("rs_bytes_corrected", bytes_corrected);
 			frame.setMetadata("rs_bits_corrected", bits_corrected);
 		}
-		catch (ReedSolomonUncorrectable& e) {
-			// TODO: Increment statistics
-			cerr << "Reed-Solomon uncorrectable" << endl;
+		catch (SuoError& e) {
+			// TODO: Increment some statistics
+			cerr << "Reed-Solomon failed: " << e.what() << endl;
 			reset();
 			return;
 		}

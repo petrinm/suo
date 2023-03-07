@@ -36,17 +36,17 @@ public:
 		/* Maximum number of bit errors */
 		unsigned int sync_threshold;
 
-		/* */
-		unsigned int header_filter;
-
 		/* Skip Reed-solomon coding */
-		unsigned int skip_rs;
+		bool use_rs;
 
 		/* Skip randomizer/scrambler */
-		unsigned int skip_randomizer;
+		bool use_randomizer;
 
 		/* Skip viterbi convolutional code */
-		unsigned int skip_viterbi;
+		bool use_viterbi;
+
+		/* Legacy mode for GomSpace's U482C radios */
+		bool legacy_mode;
 	};
 
 	explicit GolayDeframer(const Config& conf = Config());
@@ -85,7 +85,6 @@ private:
 	Frame frame;
 	unsigned int frame_len;
 	unsigned int coded_len;
-
 };
 
 }; // namespace suo

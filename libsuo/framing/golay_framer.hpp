@@ -13,7 +13,7 @@ class GolayFramer : public Block
 {
 public:
 
-	/* */
+	/* Header flags for Gomspace's legacy U482C mode */
 	static const unsigned int use_reed_solomon_flag = 0x200;
 	static const unsigned int use_randomizer_flag = 0x400;
 	static const unsigned int use_viterbi_flag = 0x800;
@@ -31,14 +31,16 @@ public:
 		unsigned int preamble_len;
 
 		/* Apply convolutional coding */
-		unsigned int use_viterbi;
+		bool use_viterbi;
 
 		/* Apply CCSDS randomizer/scrambler */
-		unsigned int use_randomizer;
+		bool use_randomizer;
 
 		/* Apply Reed Solomon error correction coding */
-		unsigned int use_rs;
+		bool use_rs;
 
+		/* Legacy mode for GommSpace's U482C radios */
+		bool legacy_mode;
 	};
 
 	/*
