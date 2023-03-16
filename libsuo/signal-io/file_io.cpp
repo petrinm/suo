@@ -1,104 +1,123 @@
 #include "signal-io/file_io.hpp"
 #include "signal-io/conversion.hpp"
 #include "registry.hpp"
+#include <SoapySDR/ConverterRegistry.hpp>
 
-#include <stdio.h>
-#include <assert.h>
+#include <fstream>
+#include <chrono>
+#include <thread>
 
 
 using namespace std;
 using namespace suo;
 
-enum inputformat { 
-	FORMAT_CU8,
-	FORMAT_CS16,
-	FORMAT_CF32
+
+struct noop {
+	void operator()(...) const {}
 };
-
-// TODO configuration for BUFLEN
-#define BUFLEN 4096
-
 
 FileIO::Config::Config() {
 	format = "CF32";
 	throttle = true;
+	sample_rate = 100e3; // [Hz]
 }
 
-FileIO::FileIO(const Config& conf) :
-	conf(conf)
+
+FileIO::FileIO(const Config& _conf) :
+	conf(_conf)
 {
-	if (conf.input.empty() != false)
-		in = fopen(conf.input.c_str(), "rb");
-	else
-		in = stdin;
-	if (in == NULL)
-		perror("Failed to open signal input");
+	/* Setup input stream */
+	if (conf.input == "-")
+		in.reset(&cin, noop());
+	else if (conf.input.empty() == false) {
+		cout << "Opening '" << conf.input << "' for signal input." << endl;
+		in.reset(new std::ifstream(conf.input));
+		if (in->bad())
+			throw SuoError("Failed to open signal input file");
+	}
 
-	if (conf.output.empty() != false)
-		out = fopen(conf.output.c_str(), "wb");
-	else
-		out = stdout;
+	/* Reset output stream */
+	if (conf.output == "-")
+		out.reset(&cout, noop());
+	else if (conf.output.empty() == false) {
+		cout << "Opening '" << conf.input << "' for signal output." << endl;
+		out.reset(new std::ofstream(conf.output));
+		if (out->bad())
+			throw SuoError("Failed to open signal output file");
+	}
 
+	if ((in.get() != nullptr && in->bad()) && (out.get() != nullptr && out->bad()))
+		throw SuoError("Neither to file input or output is defined");
 }
 
-
-FileIO::~FileIO()
-{
-	if (in)
-		fclose(in);
-	if (out)
-		fclose(out);
-}
-
-#if 0
 
 void FileIO::execute()
 {
-	enum inputformat inputformat = conf.format;
-	Timestamp timestamp = 0;
+	Timestamp now = 0;
 	Timestamp tx_latency_time = 0;
-	sample_t buf2[BUFLEN];
 
+	const size_t buffer_len = 4 * 4096;
 
-	for(;;) {
-		size_t n = BUFLEN;
+	size_t input_format_size = SoapySDR::formatToSize(conf.format);
+	SoapySDR::ConverterRegistry::ConverterFunction converter = nullptr;
 
-		// RX
-		if (sink_samples != NULL) {
-			if(inputformat == FORMAT_CU8) {
-				cu8_t buf1[BUFLEN];
-				n = fread(buf1, sizeof(cu8_t), BUFLEN, in);
-				if(n == 0) break;
-				cu8_to_cf(buf1, buf2, n);
-			} else if(inputformat == FORMAT_CS16) {
-				cs16_t buf1[BUFLEN];
-				n = fread(buf1, sizeof(cs16_t), BUFLEN, in);
-				if(n == 0) break;
-				cs16_to_cf(buf1, buf2, n);
-			} else {
-				n = fread(buf2, sizeof(sample_t), BUFLEN, in);
-				if(n == 0) break;
-			}
-			sinkSamples(buf2, n, timestamp);
-		}
+	char* read_buffer = nullptr;
+	SampleVector buffer(buffer_len);
 
-		// TX
-		if (source_samples != NULL) {
-			assert(n <= BUFLEN);
-			int tr = sourceSamples(buf2, n, timestamp + tx_latency_time);
-			fwrite(buf2, sizeof(sample_t), tr, out);
-		}
-
-		timestamp += 1e9 * n / conf.samplerate;
-
-		if (conf.throttle) {
-			nsleep(1e9 * n / conf.samplerate);
-		}
+	if (conf.format != "CF32") {
+		converter = SoapySDR::ConverterRegistry::getFunction(conf.format, "CF32");
+		if (converter == nullptr)
+			throw SuoError("Unsupported input format %s", conf.format.c_str());
+		read_buffer = new char[buffer_len * input_format_size];
+	}
+	else {
+		read_buffer = reinterpret_cast<char*>(buffer.data());
 	}
 
-}
+
+	while (true) {
+
+		size_t new_samples;
+
+		// RX
+		if (sinkSamples.has_connections() && in.get() != nullptr) {
+
+			// Read more samples
+			size_t read_len = in->readsome(read_buffer, input_format_size * buffer_len);
+			if (read_len == 0)
+				break;
+			if ((read_len % input_format_size) != 0)
+				throw SuoError("Number of read bytes is not diviable by the input format size!");
+			new_samples = read_len / input_format_size;
+
+
+			// Convert the samples to complex floats if needed
+			if (converter != nullptr)
+				converter(read_buffer, buffer.data(), new_samples, 1);
+			buffer.resize(new_samples);
+			
+			// Feed
+			sinkSamples.emit(buffer, now);
+		}
+
+#if 0
+		// TX
+		if (sourceSamples.has_connections()) {
+			assert(n <= BUFLEN);
+			buffer.clear();
+			int tr = sourceSamples(buffer, n, now + tx_latency_time);
+			ofstream.write(buffer.data(), buffer.size() * input_format_size);
+		}
 #endif
 
+		Timestamp samples_ns = 1e9 * new_samples / conf.sample_rate;
+		now += samples_ns;
+
+		if (conf.throttle)
+			std::this_thread::sleep_for(std::chrono::nanoseconds(samples_ns));
+		
+	}
+}
 
 
 Block* createFileIO(const Kwargs& args)

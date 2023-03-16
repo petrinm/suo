@@ -1,6 +1,9 @@
 #pragma once
 
 #include "suo.hpp"
+#include <ios>
+#include <fstream>
+#include <memory>
 
 namespace suo {
 
@@ -31,8 +34,8 @@ public:
 		std::string format;
 	};
 
-	FileIO(const Config& conf = Config());
-	~FileIO();
+	explicit FileIO(const Config& conf = Config());
+	//~FileIO();
 
 	void execute();
 
@@ -40,8 +43,10 @@ public:
 	Port<SampleVector&, Timestamp> sourceSamples;
 
 private:
-	Config conf;
-	FILE* in, * out;
+	const Config conf;
+	std::shared_ptr<std::istream> in;
+	std::shared_ptr<std::ostream> out;
 };
+
 
 }; // namespace suo
