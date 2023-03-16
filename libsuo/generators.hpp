@@ -67,35 +67,22 @@ public:
 	// Range-based for loop support.
 	class Iterator {
 	public:
-		void operator++() {
-			coro_handle.resume();
-		}
-
-		Symbol operator*() const {
-			// TODO!!!!
-			return 0.0f;// coro_handle.promise();
-		}
-		bool operator==(std::default_sentinel_t) const {
-			return !coro_handle || coro_handle.done();
-		}
-
-		explicit Iterator(const handle_type handle_) :
-			coro_handle{ handle_ }
-		{}
+		void operator++();
+		Symbol operator*();
+		bool operator==(std::default_sentinel_t) const;
+		Iterator(SymbolGenerator& gen, size_t buffer_size);
 
 	private:
-		handle_type coro_handle;
+		SymbolGenerator& gen;
+		SymbolVector buffer;
+		SymbolVector::iterator it;
 	};
 
-	Iterator begin() {
-		if (coro_handle)
-			coro_handle.resume();
-		return Iterator{ coro_handle };
-	}
+	/* */
+	Iterator begin(size_t buffer_size=64);
 
-	std::default_sentinel_t end() {
-		return {};
-	}
+	/* */
+	std::default_sentinel_t end() { return {}; }
 
 private:
 	handle_type coro_handle;
@@ -188,7 +175,35 @@ private:
 };
 
 
+
+
+
+/* */
+class SymbolGeneratorFromCallback
+{
+public:
+	typedef std::function<void(SymbolVector&, Timestamp)> CallbackType;
+
+	/* */
+	SymbolGeneratorFromCallback(CallbackType const& callback, size_t size);
+
+	/* */
+	SymbolGenerator generateSymbols(Timestamp now);
+
+private:
+
+	/* */
+	SymbolGenerator generator();
+
+	CallbackType const& callback;
+	SymbolGenerator gen;
+	SymbolVector symbols;
+	Timestamp _now;
+};
+
+
 SymbolGenerator generator_from_vector(const SymbolVector& symbols);
 SampleGenerator generator_from_vector(const SampleVector& samples);
+
 
 }; // namespace suo

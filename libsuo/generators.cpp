@@ -92,6 +92,8 @@ std::suspend_always SymbolGenerator::SymbolPromise::yield_value(SymbolGenerator&
 
 void SymbolGenerator::SymbolPromise::return_void() {
 	//cout << "return void" << endl;
+	if (out != nullptr)
+		out->flags |= end_of_burst;
 }
 
 ///////////////////////////////
@@ -124,9 +126,16 @@ SymbolGenerator& SymbolGenerator::operator=(SymbolGenerator&& other) noexcept {
 
 bool SymbolGenerator::running() const
 {
+	// Valid coroutine handle?
 	if (!coro_handle)
 		return false;
 
+	// No buffered symbols?
+	SymbolPromise& promise = coro_handle.promise();
+	if (promise.input_iter != promise.input_end) 
+		return true;
+
+	// Execution has returned
 	return !coro_handle.done();
 }
 
@@ -205,10 +214,56 @@ void SymbolGenerator::sourceSymbols(SymbolVector& out)
 		promise.out = nullptr;
 		throw;
 	}
-
 }
 
 
+void SymbolGenerator::Iterator::operator++() {
+	if (it != buffer.end()) { // Buffer is not empty
+		it++;
+		// Reload the buffer if we hit the end
+		if (it == buffer.end()) {
+			gen.sourceSymbols(buffer);
+			it = buffer.begin();
+		}
+	}
+	else {
+		// Buffer has hit the end
+		gen.sourceSymbols(buffer);
+		it = buffer.begin();
+	}
+}
+
+
+Symbol SymbolGenerator::Iterator::operator*() {
+	if (it == buffer.end()) {
+		// This happens in case of iter = begin()
+		gen.sourceSymbols(buffer);
+		it = buffer.begin();
+		if (it == buffer.end())
+			return 0;
+	}
+	return *it;
+}
+
+
+bool SymbolGenerator::Iterator::operator==(std::default_sentinel_t) const {
+	if (it != buffer.end())
+		return false;
+	return gen.running() == false;
+}
+
+
+SymbolGenerator::Iterator::Iterator(SymbolGenerator& gen, size_t buffer_size):
+	gen(gen)
+{
+	buffer.reserve(buffer_size);
+	it = buffer.end();
+}
+
+
+SymbolGenerator::Iterator SymbolGenerator::begin(size_t buffer_size) {
+	return Iterator(*this, buffer_size);
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -275,6 +330,8 @@ std::suspend_always SampleGenerator::SamplePromise::yield_value(const SampleVect
 
 void SampleGenerator::SamplePromise::return_void() {
 	//cout << "return void" << endl;
+	if (out != nullptr)
+		out->flags |= end_of_burst;
 }
 
 
@@ -361,7 +418,7 @@ void SampleGenerator::sourceSamples(SampleVector& out)
 	try {
 		promise.out = &out;
 
-		while (out.full() == false) {
+		while (out.full() == false && coro_handle.done() == false) {
 			//cout << "generate_more " << out.size() << " < " << out.capacity() << endl;
 
 			// Continue execution to generate more samples
@@ -387,3 +444,48 @@ void SampleGenerator::sourceSamples(SampleVector& out)
 	}
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+
+SymbolGeneratorFromCallback::SymbolGeneratorFromCallback(CallbackType const& callback, size_t size):
+	callback(callback),
+	_now(0)
+{
+	symbols.reserve(size);
+}
+
+
+SymbolGenerator SymbolGeneratorFromCallback::generateSymbols(Timestamp now) {
+	_now = now;
+	callback(symbols, now);
+	if (symbols.empty() == false)
+		return generator();
+	return SymbolGenerator();
+}
+
+
+SymbolGenerator SymbolGeneratorFromCallback::generator()
+{
+	while (symbols.empty()) {
+
+		co_yield symbols;
+		
+		if (symbols.flags & end_of_burst) {
+			symbols.clear();
+			co_return;
+		}
+		
+		symbols.clear();
+		
+		callback(symbols, _now);
+	}
+}
+
+
+SymbolGenerator generator_from_vector(const SymbolVector& symbols) {
+	co_yield symbols;
+}
+
+SampleGenerator generator_from_vector(const SampleVector& samples) {
+	co_yield samples;
+}
