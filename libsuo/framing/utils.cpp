@@ -31,13 +31,16 @@ size_t suo::word_to_lsb_bits(Bit* out, uint64_t word, size_t n_bits)
 
 SymbolVector suo::word_to_lsb_bits(uint64_t word, size_t n_bits)
 {
+	assert(n_bits <= 8 * sizeof(word));
 	SymbolVector bits(n_bits);
 	for (size_t i = n_bits; i > 0; i--) {
-		bits[i] = (word & 1);
+		bits[i - 1] = (word & 1);
 		word >>= 1;
 	}
 	return bits;
 }
+
+
 
 SymbolVector suo::word_to_lsb_bits(uint8_t byte) {
 	SymbolVector bits(8);
