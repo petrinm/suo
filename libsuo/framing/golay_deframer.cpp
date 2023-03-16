@@ -179,7 +179,7 @@ void GolayDeframer::receivePayload(Symbol bit, Timestamp now)
 	{
 		/* Scrambler the bytes */
 		for (size_t i = 0; i < frame.data.size(); i++)
-			frame.data[i] ^= ccsds_randomizer[i];
+			frame.data[i] ^= ccsds_tm_randomizer[i];
 	}
 
 	if (conf.legacy_mode ? ((coded_len & GolayFramer::use_reed_solomon_flag) != 0) : conf.use_rs)

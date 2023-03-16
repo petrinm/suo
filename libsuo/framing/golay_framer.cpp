@@ -73,7 +73,7 @@ SymbolGenerator GolayFramer::symbolGenerator(Frame& frame)
 	/* Scrambler the bytes */
 	if (conf.use_randomizer) {
 		for (size_t i = 0; i < data_buffer.size(); i++)
-			data_buffer[i] ^= ccsds_randomizer[i];
+			data_buffer[i] ^= ccsds_tm_randomizer[i];
 	}
 
 	/* Output Golay coded length (+coding flags) */
