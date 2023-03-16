@@ -12,7 +12,8 @@ namespace suo
 extern uint16_t crc16_ccitt(const uint8_t* data_p, size_t length);
 
 enum HDLCMode {
-	Plain,
+	Uncoded,
+	NRZI,
 	G3RUH,
 };
 

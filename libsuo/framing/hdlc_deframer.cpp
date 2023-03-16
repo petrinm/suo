@@ -29,7 +29,7 @@ uint16_t suo::crc16_ccitt(const uint8_t* data_p, size_t length)
 
 
 HDLCDeframer::Config::Config() {
-	mode = G3RUH;
+	mode = NRZI;
 	minimum_frame_length = 3;
 	maximum_frame_length = 128;
 	minimum_silence = 6 * 8;
@@ -55,9 +55,13 @@ void HDLCDeframer::reset()
 	syncDetected.emit(false, 0);
 	state = WaitingSync;
 	shift = 0;
-	frame.data.clear();
-	stuffing_counter = 0;
 	bit_idx = 0;
+	frame.clear();
+
+	last_bit = 0;
+	scrambler = 0;
+	stuffing_counter = 0;
+
 }
 
 
@@ -81,13 +85,19 @@ Symbol HDLCDeframer::descramble_bit(Symbol bit)
 		last_bit = bit;
 		return new_bit;
 	}
-	else 
+	else if (conf.mode == NRZI) {
+		/* NRZI decode */
+		Symbol new_bit = (bit != last_bit) ? 0 : 1;
+		last_bit = bit;
+		return new_bit;
+	}
+	else
 		return bit;
-
 }
 
-void HDLCDeframer::findStartFlag(Symbol bit, Timestamp now) {
 
+void HDLCDeframer::findStartFlag(Symbol bit, Timestamp now)
+{
 	// More than 5 continious 1's have been received.
 	if (stuffing_counter == 6 && bit == 0) { 
 		// Start/end flag!
@@ -104,9 +114,9 @@ void HDLCDeframer::findStartFlag(Symbol bit, Timestamp now) {
 		frame.setMetadata("sync_utc_timestamp", getISOCurrentTimestamp());
 
 	}
-
 	stuffing_counter = bit ? (stuffing_counter + 1) : 0;
 }
+
 
 
 void HDLCDeframer::receivingFrame(Symbol bit, Timestamp now) {

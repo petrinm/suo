@@ -24,6 +24,7 @@ HDLCFramer::HDLCFramer(const Config& conf) :
 	conf(conf)
 {
 	reset();
+	reset_scrambler();
 }
 
 
@@ -66,8 +67,19 @@ Symbol HDLCFramer::scramble_bit(Symbol bit) {
 
 		return scr_bit;
 	}
-
-	return bit;
+	else if (conf.mode == NRZI) {
+		// NRZ-I encoding
+		if (bit == 1) { // If one, state remains
+			bit = last_bit;
+		}
+		else { // If zero, state flips
+			bit = !last_bit;
+			last_bit = bit;
+		}
+		return bit;
+	}
+	else
+		return bit;
 }
 
 
