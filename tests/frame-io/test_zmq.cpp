@@ -7,8 +7,8 @@
 #include <cppunit/TestCaller.h>
 #include <cppunit/ui/text/TestRunner.h>
 
-#include "suo.hpp"
-#include "frame-io/zmq_interface.hpp"
+#include <suo.hpp>
+#include <frame-io/zmq_interface.hpp>
 
 
 using namespace std;
@@ -33,7 +33,6 @@ public:
 		now = time(nullptr) % 0xFFFFFF;
 	}
 
-	void tearDown() { }
 
 	void runTest() {
 
@@ -123,13 +122,21 @@ public:
 
 	}
 
+	static CppUnit::Test* suite()
+	{
+		CppUnit::TestSuite* suite = new CppUnit::TestSuite("ZMQTest");
+		suite->addTest(new CppUnit::TestCaller<ZMQTest>("Basic", &ZMQTest::runTest));
+		return suite;
+	}
+
 };
 
-
+#ifndef COMBINED_TEST
 int main(int argc, char** argv)
 {
 	CppUnit::TextUi::TestRunner runner;
-	runner.addTest(new CppUnit::TestCaller<ZMQTest>("ZMQTest", &ZMQTest::runTest));
+	runner.addTest(ZMQTest::suite());
 	runner.run();
 	return 0;
 }
+#endif

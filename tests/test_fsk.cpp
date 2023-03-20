@@ -29,62 +29,14 @@ class FSKTest : public CppUnit::TestFixture
 {
 private:
 	Timestamp now;
-	Stats stats;
-	SampleVector samples;
-	Frame transmit_frame;
-	Frame received_frame;
-	bool frame_generated;
 
 public:
 
 	void setUp() {
 		srand(time(nullptr));
 		now = 0;// rand() & 0xFFFFFF;
-
-		samples.reserve(MAX_SAMPLES);
-		samples.resize(MAX_SAMPLES);
-		samples.clear();
-		transmit_frame.clear();
-		received_frame.clear();
-		frame_generated = false;
-		stats.clear();
 	}
 
-
-	void dummy_frame_sink(const Frame &frame, Timestamp _now) {
-		(void)_now;
-		received_frame = frame;
-		cout << "Received:" << endl;
-		cout << frame(Frame::PrintData | Frame::PrintMetadata | Frame::PrintAltColor | Frame::PrintColored);
-	}
-
-
-	void source_dummy_frame(Frame &frame, Timestamp _now) {
-		(void)_now;
-		if (frame_generated) return;
-		frame_generated = true;
-
-		// Generate a new frame
-		size_t data_len = 200;
-		static unsigned int id = 1;
-		frame.id = id++;
-		frame.timestamp = _now;
-		frame.data.resize(data_len);
-		//frame.data_len = 32 + rand() % 128;
-		for (unsigned i = 0; i < data_len; i++)
-			frame.data[i] = rand() % 256;
-
-		cout << frame(Frame::PrintData | Frame::PrintColored);
-
-		// Copy the frame for later asserting
-		transmit_frame = frame; 
-	}
-
-
-	void dummy_sync_detected(bool sync, Timestamp _now) {
-		(void)_now;
-		cout << "Sync detected = " << (sync ? "true" : "false") << endl;
-	}
 
 
 	void runTest()
@@ -93,12 +45,14 @@ public:
 
 		/* Contruct framer */
 		HDLCFramer::Config framer_conf;
-		framer_conf.mode = HDLCFramer::G3RUH;
+		framer_conf.mode = HDLCMode::G3RUH;
 		framer_conf.preamble_length = 4;
 		framer_conf.trailer_length = 2;
 		framer_conf.append_crc = false;
+
 		HDLCFramer framer(framer_conf);
-		framer.sourceFrame.connect_member(this, &FSKTest::source_dummy_frame);
+		RandomFrameGenerator frame_gen(64);
+		framer.sourceFrame.connect_member(&frame_gen, &RandomFrameGenerator::source_frame);
 
 
 		/* Contruct modulator */
@@ -112,20 +66,29 @@ public:
 		mod_conf.ramp_down_duration = 3;
 
 		FSKModulator mod(mod_conf);
-		mod.sourceSymbols.connect_member(&framer, &HDLCFramer::sourceSymbols);
+		mod.generateSymbols.connect_member(&framer, &HDLCFramer::generateSymbols);
 
 
 		/* Construct deframer */
 		HDLCDeframer::Config deframer_conf;
-		deframer_conf.mode = HDLCFramer::G3RUH;
+		deframer_conf.mode = framer_conf.mode;
 		deframer_conf.check_crc = false;
 		deframer_conf.maximum_frame_length = 256;
 		deframer_conf.minimum_frame_length = 8;
 		deframer_conf.minimum_silence = 5;
 
 		HDLCDeframer deframer(deframer_conf);
-		deframer.sinkFrame.connect_member(this, &FSKTest::dummy_frame_sink);
-		deframer.syncDetected.connect_member(this, &FSKTest::dummy_sync_detected);
+
+		Frame received_frame;
+		deframer.sinkFrame.connect([&](Frame& frame, Timestamp now) {
+			(void)now;
+			received_frame = frame;
+		});
+
+		deframer.syncDetected.connect([&](bool sync, Timestamp now) {
+			(void)now;
+			cout << "Sync detected = " << (sync ? "true" : "false") << endl;
+		});
 
 
 		/* Construct demodulator */
@@ -146,13 +109,21 @@ public:
 		float noise_std = pow(10.0f, -SNRdB/20.0f); // Noise standard deviation
 		noise_std /= (signal_bandwidth / mod_conf.sample_rate);
 
+
+		SampleVector samples;
+		samples.reserve(MAX_SAMPLES);
+		samples.resize(MAX_SAMPLES);
+		samples.clear();
+
+
 		// Feed some noise to demodulator
 		generate_noise(samples, noise_std, 5000);
 		demod.sinkSamples(samples, now);
 
 		// Modulate the signal
 		samples.clear();
-		mod.sourceSamples(samples, now);
+		SampleGenerator sample_gen = mod.generateSamples(now);
+		sample_gen.sourceSamples(samples);
 		cout << "Generated " << samples.size() << " samples" << endl;
 		CPPUNIT_ASSERT(samples.size() > 0);
 

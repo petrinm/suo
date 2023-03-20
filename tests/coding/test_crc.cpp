@@ -5,9 +5,10 @@
 #include <cppunit/TestCaller.h>
 #include <cppunit/ui/text/TestRunner.h>
 
-#include "suo.hpp"
-#include "coding/crc.hpp"
-#include "coding/crc_generic.hpp"
+#include <suo.hpp>
+#include <coding/crc.hpp>
+#include <coding/crc_generic.hpp>
+
 
 using namespace std;
 using namespace suo;
@@ -19,17 +20,17 @@ public:
 
 	void run_reverse_bits_test()
 	{
-		CPPUNIT_ASSERT_EQUAL(reverse_bits<uint8_t>(0x11), (uint8_t)0x88U);
-		CPPUNIT_ASSERT_EQUAL(reverse_bits<uint8_t>(0xF0), (uint8_t)0x0FU);
-		CPPUNIT_ASSERT_EQUAL(reverse_bits<uint8_t>(0x10), (uint8_t)0x08U);
+		CPPUNIT_ASSERT_EQUAL(reverse_bits((uint8_t)0x11), (uint8_t)0x88U);
+		CPPUNIT_ASSERT_EQUAL(reverse_bits((uint8_t)0xF0), (uint8_t)0x0FU);
+		CPPUNIT_ASSERT_EQUAL(reverse_bits((uint8_t)0x10), (uint8_t)0x08U);
 
-		CPPUNIT_ASSERT_EQUAL(reverse_bits<uint16_t>(0x800FU), (uint16_t)0xF001U);
-		CPPUNIT_ASSERT_EQUAL(reverse_bits<uint16_t>(0xF0F0U), (uint16_t)0x0F0FU);
-		CPPUNIT_ASSERT_EQUAL(reverse_bits<uint16_t>(0x30F1U), (uint16_t)0x8F0CU);
+		CPPUNIT_ASSERT_EQUAL(reverse_bits((uint16_t)0x800FU), (uint16_t)0xF001U);
+		CPPUNIT_ASSERT_EQUAL(reverse_bits((uint16_t)0xF0F0U), (uint16_t)0x0F0FU);
+		CPPUNIT_ASSERT_EQUAL(reverse_bits((uint16_t)0x30F1U), (uint16_t)0x8F0CU);
 
-		CPPUNIT_ASSERT_EQUAL(reverse_bits<uint32_t>(0x00000001U), 0x80000000U);
-		CPPUNIT_ASSERT_EQUAL(reverse_bits<uint32_t>(0x000000F0U), 0x0F000000U);
-		CPPUNIT_ASSERT_EQUAL(reverse_bits<uint32_t>(0x00000800U), 0x00100000U);
+		CPPUNIT_ASSERT_EQUAL(reverse_bits((uint32_t)0x00000001U), (uint32_t)0x80000000U);
+		CPPUNIT_ASSERT_EQUAL(reverse_bits((uint32_t)0x000000F0U), (uint32_t)0x0F000000U);
+		CPPUNIT_ASSERT_EQUAL(reverse_bits((uint32_t)0x00000800U), (uint32_t)0x00100000U);
 	}
 
 
@@ -74,15 +75,25 @@ public:
 		CPPUNIT_ASSERT_EQUAL(0x765E7680U, crc_posix.calculate(data));
 	}
 
+	static CppUnit::Test* suite()
+	{
+		CppUnit::TestSuite* suite = new CppUnit::TestSuite("CRCTest");
+		suite->addTest(new CppUnit::TestCaller<CRCTest>("reverse_bits", &CRCTest::run_reverse_bits_test));
+		//suite->addTest(new CppUnit::TestCaller<CRCTest>("CRC-8", &CRCTest::run_crc8_test));
+		suite->addTest(new CppUnit::TestCaller<CRCTest>("CRC-16", &CRCTest::run_crc16_test));
+		suite->addTest(new CppUnit::TestCaller<CRCTest>("CRC-32", &CRCTest::run_crc32_test));
+		return suite;
+	}
+	
 };
 
 
-
+#ifndef COMBINED_TEST
 int main(int argc, char** argv)
 {
 	CppUnit::TextUi::TestRunner runner;
-	runner.addTest(new CppUnit::TestCaller<CRCTest>("CRCTest", &CRCTest::run_crc16_test));
-	runner.addTest(new CppUnit::TestCaller<CRCTest>("CRCTest", &CRCTest::run_crc32_test));
+	runner.addTest(CRCTest::suite());
 	runner.run();
 	return 0;
 }
+#endif

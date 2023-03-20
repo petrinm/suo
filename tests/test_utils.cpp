@@ -1,12 +1,15 @@
 #include <iostream>
+#include <bit> // popcount
 
 #include <cppunit/TestFixture.h>
 #include <cppunit/TestAssert.h>
 #include <cppunit/TestCaller.h>
 #include <cppunit/ui/text/TestRunner.h>
 
+
 #include "suo.hpp"
 #include "framing/utils.hpp"
+#include "coding/golay24.hpp"
 
 using namespace std;
 using namespace suo;
@@ -38,10 +41,10 @@ public:
 		for (size_t i = 0; i < frame_a.size(); i++)
 			frame_a.data[i] = rand() % 256;
 
-		frame_a.setMetadata("SYNC_ERRORS", -1);
-		frame_a.setMetadata("GOLAY_CODED", 1337);
-		frame_a.setMetadata("CFO", 12.345);
-		frame_a.setMetadata("RSSI", -123.4);
+		frame_a.setMetadata("sync_errors", -1);
+		frame_a.setMetadata("golay_coded", 1337);
+		frame_a.setMetadata("cfo", 12.345);
+		frame_a.setMetadata("rssi", -123.4);
 		CPPUNIT_ASSERT(frame_a.metadata.size() == 4);
 
 		cout << frame_a(Frame::PrintData | Frame::PrintMetadata | Frame::PrintAltColor);
@@ -202,6 +205,35 @@ public:
 		CPPUNIT_ASSERT(bit_parity((uint64_t)0xFFFFFFFFFFFFFFFF) == 0);
 	}
 
+
+	void _golay24_test_case(const uint32_t correct, uint32_t errors, bool correctable) {
+		uint32_t data = correct;
+		CPPUNIT_ASSERT(encode_golay24(&data) == 0);
+		data ^= errors;
+		if (correctable) {
+			CPPUNIT_ASSERT(decode_golay24(&data) == std::popcount(errors));
+			CPPUNIT_ASSERT((data & 0xFFF) == correct);
+		}
+		else {
+			CPPUNIT_ASSERT(decode_golay24(&data) < 0);
+		}
+	}
+
+	/* Test golay24 function */
+	void test_golay24() {
+		_golay24_test_case(0x000, 0x0000, true);
+		_golay24_test_case(0xAAA, 0x0001, true);
+		_golay24_test_case(0x5F5, 0x8000, true);
+		_golay24_test_case(0x0F0, 0x0400, true);
+		_golay24_test_case(0xFFF, 0x1201, true);
+		_golay24_test_case(0x000, 0x0A0A, false);
+		_golay24_test_case(0xAAA, 0x0F00, false);
+		_golay24_test_case(0x5F5, 0x4133, false);
+		_golay24_test_case(0x0F0, 0x801F, false);
+		_golay24_test_case(0xFFF, 0x8141, false);
+	}
+
+
 	static CppUnit::Test* suite()
 	{
 		CppUnit::TestSuite* suite = new CppUnit::TestSuite("FrameTest");
@@ -210,6 +242,7 @@ public:
 		//suite->addTest(new CppUnit::TestCaller<FrameTest>("Bit operations", &FrameTest::test_bit_operations));
 		suite->addTest(new CppUnit::TestCaller<FrameTest>("Bit Parity Test", &FrameTest::test_bit_parity));
 		suite->addTest(new CppUnit::TestCaller<FrameTest>("Bit Reverse Test", &FrameTest::test_reverse_bits));
+		suite->addTest(new CppUnit::TestCaller<FrameTest>("Golay24 Test", &FrameTest::test_golay24));
 		return suite;
 	}
 

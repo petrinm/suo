@@ -7,17 +7,15 @@
 #include <cppunit/TestCaller.h>
 #include <cppunit/ui/text/TestRunner.h>
 
-#include <matplot/matplot.h>
+#include <suo.hpp>
+#include <modem/mod_gmsk.hpp>
+#include <modem/demod_gmsk.hpp>
+#include <modem/demod_gmsk_cont.hpp>
+#include <modem/demod_fsk_mfilt.hpp>
+#include <framing/golay_framer.hpp>
+#include <framing/golay_deframer.hpp>
+#include <plotter.hpp>
 
-#include "suo.hpp"
-#include "modem/mod_gmsk.hpp"
-#include "modem/demod_gmsk.hpp"
-#include "modem/demod_gmsk_cont.hpp"
-#include "modem/demod_fsk_mfilt.hpp"
-#include "framing/golay_framer.hpp"
-#include "framing/golay_deframer.hpp"
-
-#include "plotter.hpp"
 #include "utils.hpp"
 
 using namespace std;
@@ -30,63 +28,14 @@ class GMSKTest : public CppUnit::TestFixture
 {
 private:
 	Timestamp now;
-	Stats stats;
-	SampleVector samples;
-	Frame transmit_frame;
-	Frame received_frame;
-	bool frame_generated;
+
 
 public:
 
 	void setUp() {
 		srand(time(nullptr));
 		now = 0;// rand() & 0xFFFFFF;
-
-		samples.reserve(MAX_SAMPLES);
-		samples.resize(MAX_SAMPLES);
-		samples.clear();
-		transmit_frame.clear();
-		received_frame.clear();
-		frame_generated = false;
-		stats.clear();
 	}
-
-
-	void dummy_frame_sink(const Frame &frame, Timestamp _now) {
-		(void)_now;
-		received_frame = frame;
-		cout << "Received:" << endl;
-		cout << frame(Frame::PrintData | Frame::PrintMetadata | Frame::PrintAltColor | Frame::PrintColored);
-	}
-
-
-	void source_dummy_frame(Frame &frame, Timestamp _now) {
-		(void)_now;
-		if (frame_generated) return;
-		frame_generated = true;
-
-		// Generate a new frame
-		size_t data_len = 200;
-		static unsigned int id = 1;
-		frame.id = id++;
-		frame.timestamp = _now;
-		frame.data.resize(data_len);
-		//frame.data_len = 32 + rand() % 128;
-		for (unsigned i = 0; i < data_len; i++)
-			frame.data[i] = rand() % 256;
-
-		cout << frame(Frame::PrintData | Frame::PrintColored);
-
-		// Copy the frame for later asserting
-		transmit_frame = frame; 
-	}
-
-
-	void dummy_sync_detected(bool sync, Timestamp _now) {
-		(void)_now;
-		cout << "Sync detected = " << (sync ? "true" : "false") << endl;
-	}
-
 
 	void runTest()
 	{		
@@ -94,42 +43,49 @@ public:
 
 		/* Contruct framer */
 		GolayFramer::Config framer_conf;
-		framer_conf.sync_word = 0xC9D08A7B;
-		framer_conf.sync_len = 32;
-		framer_conf.preamble_len = 64;
-		framer_conf.use_viterbi = 0;
-		framer_conf.use_randomizer = 0;
-		framer_conf.use_rs = 0;
+		framer_conf.syncword = 0xC9D08A7B;
+		framer_conf.syncword_len = 32;
+		framer_conf.preamble_len = 16*8;
+		framer_conf.use_viterbi = false;
+		framer_conf.use_randomizer = true;
+		framer_conf.use_rs = true;
 
 		GolayFramer framer(framer_conf);
-		framer.sourceFrame.connect_member(this, &GMSKTest::source_dummy_frame);
+		RandomFrameGenerator frame_generator(28);
+		framer.sourceFrame.connect_member(&frame_generator, &RandomFrameGenerator::source_frame);
 
 
 		/* Contruct modulator */
 		GMSKModulator::Config mod_conf;
 		mod_conf.sample_rate = 50e3;
 		mod_conf.symbol_rate = 9600;
-		mod_conf.center_frequency = 0e3;
-		mod_conf.bt = 0.9;
-		mod_conf.ramp_up_duration = 3;
-		mod_conf.ramp_down_duration = 3;
+		mod_conf.center_frequency = 0;
+		mod_conf.bt = 0.5;
+		mod_conf.ramp_up_duration = 8;
+		mod_conf.ramp_down_duration = 8;
 
 		GMSKModulator mod(mod_conf);
-		mod.sourceSymbols.connect_member(&framer, &GolayFramer::sourceSymbols);
+		mod.generateSymbols.connect_member(&framer, &GolayFramer::generateSymbols);
 
 
 		/* Construct deframer */
 		GolayDeframer::Config deframer_conf;
-		deframer_conf.sync_word = framer_conf.sync_word;
-		deframer_conf.sync_len = framer_conf.sync_len;
+		deframer_conf.syncword = framer_conf.syncword;
+		deframer_conf.syncword_len = framer_conf.syncword_len;
 		deframer_conf.sync_threshold = 4;
-		deframer_conf.skip_viterbi = 1;
-		deframer_conf.skip_randomizer = 0;
-		deframer_conf.skip_rs = 1;
 
 		GolayDeframer deframer(deframer_conf);
-		deframer.sinkFrame.connect_member(this, &GMSKTest::dummy_frame_sink);
-		deframer.syncDetected.connect_member(this, &GMSKTest::dummy_sync_detected);
+		Frame received_frame;
+		deframer.sinkFrame.connect([&](Frame& frame, Timestamp now) {
+			(void)now;
+			received_frame = frame;
+			cout << frame(Frame::PrintData | Frame::PrintMetadata | Frame::PrintAltColor | Frame::PrintColored);
+		});
+
+		deframer.syncDetected.connect([&](bool sync, Timestamp now) {
+			(void)now;
+			cout << "Sync detected = " << (sync ? "true" : "false") << endl;
+		});
 
 
 		/* Construct demodulator */
@@ -144,40 +100,51 @@ public:
 		FSKMatchedFilterDemodulator demod(demod_conf);
 		demod.sinkSymbol.connect_member(&deframer, &GolayDeframer::sinkSymbol);
 		deframer.syncDetected.connect_member(&demod, &FSKMatchedFilterDemodulator::lockReceiver);
+		demod.setMetadata.connect_member(&deframer, &GolayDeframer::setMetadata);
 #elif 1
 		GMSKContinousDemodulator::Config demod_conf;
 		demod_conf.sample_rate = mod_conf.sample_rate;
 		demod_conf.symbol_rate = mod_conf.symbol_rate;
 		demod_conf.center_frequency = mod_conf.center_frequency + frequency_offset;
 		demod_conf.bt = mod_conf.bt;
+		demod_conf.samples_per_symbol = 4;
 
 		GMSKContinousDemodulator demod(demod_conf);
 		demod.sinkSymbol.connect_member(&deframer, &GolayDeframer::sinkSymbol);
 		deframer.syncDetected.connect_member(&demod, &GMSKContinousDemodulator::lockReceiver);
+		demod.setMetadata.connect_member(&deframer, &GolayDeframer::setMetadata);
 #else
 		GMSKDemodulator::Config demod_conf;
 		demod_conf.sample_rate = mod_conf.sample_rate;
 		demod_conf.symbol_rate = mod_conf.symbol_rate;
 		demod_conf.center_frequency = mod_conf.center_frequency + frequency_offset;
-		demod_conf.sync_word = framer_conf.sync_word;
-		demod_conf.sync_len = framer_conf.sync_len;
+		demod_conf.syncword = framer_conf.syncword;
+		demod_conf.syncword_len = framer_conf.syncword_len;
 
 		GMSKDemodulator demod(demod_conf);
 		demod.sinkSymbol.connect_member(&deframer, &GolayDeframer::sinkSymbol);
 		deframer.syncDetected.connect_member(&demod, &GMSKContinousDemodulator::lockReceiver);
+		demod.setMetadata.connect_member(&deframer, &GolayDeframer::setMetadata);
 #endif
 
-		float SNRdB = 20;
+
+		float SNRdB = 35;
 		float signal_bandwidth = mod_conf.symbol_rate;
 		float noise_std = pow(10.0f, -SNRdB/20.0f); // Noise standard deviation
+		noise_std /= (signal_bandwidth / mod_conf.sample_rate);
+
+		SampleVector samples;
+		samples.reserve(MAX_SAMPLES);
 
 		// Feed some noise to demodulator
-		generate_noise(samples, noise_std, 5000);
+		generate_noise(samples, noise_std, 500);
 		demod.sinkSamples(samples, now);
 
 		// Modulate the signal
 		samples.clear();
-		mod.sourceSamples(samples, now);
+		SampleGenerator sample_gen = mod.generateSamples(now);
+		CPPUNIT_ASSERT(sample_gen.running() == true);
+		sample_gen.sourceSamples(samples);
 		cout << "Generated " << samples.size() << " samples" << endl;
 		CPPUNIT_ASSERT(samples.size() > 0);
 
@@ -185,11 +152,11 @@ public:
 		add_noise(samples, noise_std);
 		delay_signal(randuf(0.0f, 1.0f), samples);
 
-#if 0
+#ifdef SUO_SUPPORT_PLOTTING
 		ComplexPlotter iq_plot(samples);
 		iq_plot.iq.resize(1000);
 		iq_plot.plot();
-		//iq_plot.plot_constellation();
+		iq_plot.plot_constellation();
 		matplot::show();
 #endif
 
@@ -202,23 +169,35 @@ public:
 		demod.sinkSamples(samples, now);
 #endif
 		
-		count_bit_errors(stats, transmit_frame, received_frame);
+		Stats stats;
+		count_bit_errors(stats, frame_generator.latest_frame(), received_frame);
 		cout << stats;
 
 		// Assert the transmit and received frames
 		CPPUNIT_ASSERT(received_frame.empty() == false);
-		CPPUNIT_ASSERT(received_frame.data.size() == transmit_frame.data.size());
-		CPPUNIT_ASSERT(transmit_frame.data == received_frame.data);
+		CPPUNIT_ASSERT(received_frame.size() == frame_generator.latest_frame().size());
+		CPPUNIT_ASSERT(received_frame.data == frame_generator.latest_frame().data);
 	}
+
+
+
+	static CppUnit::Test* suite()
+	{
+		CppUnit::TestSuite* suite = new CppUnit::TestSuite("GMSKTest");
+		suite->addTest(new CppUnit::TestCaller<GMSKTest>("Basic test", &GMSKTest::runTest));
+		return suite;
+	}
+
 
 };
 
 
-
+#ifndef COMBINED_TEST
 int main(int argc, char** argv)
 {
 	CppUnit::TextUi::TestRunner runner;
-	runner.addTest(new CppUnit::TestCaller<GMSKTest>("GMSKTest", &GMSKTest::runTest));
+	runner.addTest(GMSKTest::suite());
 	runner.run();
 	return 0;
 }
+#endif

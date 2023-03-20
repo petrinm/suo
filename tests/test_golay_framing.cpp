@@ -9,9 +9,10 @@
 #include <cppunit/TestCaller.h>
 #include <cppunit/ui/text/TestRunner.h>
 
-#include "suo.hpp"
-#include "framing/golay_framer.hpp"
-#include "framing/golay_deframer.hpp"
+#include <suo.hpp>
+#include <framing/golay_framer.hpp>
+#include <framing/golay_deframer.hpp>
+
 #include "utils.hpp"
 
 using namespace std;
@@ -39,7 +40,7 @@ public:
 		unsynced = false;
 	}
 
-	void dummy_frame_sink(const Frame &frame, Timestamp _now) {
+	void dummy_frame_sink(Frame &frame, Timestamp _now) {
 		(void)_now;
 		//cout << "dummy_frame_sink" << endl;
 		received_frame = frame;
@@ -57,9 +58,6 @@ public:
 		if (!sync) unsynced = true;
 	}
 
-	void tearDown() {
-	}
-
 	void basicTest()
 	{
 
@@ -69,12 +67,12 @@ public:
 		 * Encoding test
 		 */
 		GolayFramer::Config framer_conf;
-		framer_conf.sync_word = 0xdeadbeef;
-		framer_conf.sync_len = 32;
 		framer_conf.preamble_len = 64;
-		framer_conf.use_viterbi = 0;
-		framer_conf.use_randomizer = 1;
-		framer_conf.use_rs = 0;
+		framer_conf.syncword = 0xdeadbeef;
+		framer_conf.syncword_len = 32;
+		framer_conf.use_viterbi = false;
+		framer_conf.use_randomizer = true;
+		framer_conf.use_rs = false;
 
 		GolayFramer framer(framer_conf);
 		framer.sourceFrame.connect_member(this, &GolayFramingTest::dummy_frame_source);
@@ -89,7 +87,7 @@ public:
 		cout << transmit_frame(Frame::PrintData | Frame::PrintColored);
 
 
-		size_t total_symbols = framer_conf.preamble_len + framer_conf.sync_len + 24 + 8 * transmit_frame.data.size();
+		size_t total_symbols = framer_conf.preamble_len + framer_conf.syncword_len + 24 + 8 * transmit_frame.data.size();
 
 		
 		/* Encode frame to bits */
@@ -124,12 +122,12 @@ public:
 		symbols[64 + 32 + 9] ^= 4;  // Golay bit error
 
 		GolayDeframer::Config deframer_conf;
-		deframer_conf.sync_word = framer_conf.sync_word;
-		deframer_conf.sync_len = framer_conf.sync_len;
+		deframer_conf.syncword = framer_conf.syncword;
+		deframer_conf.syncword_len = framer_conf.syncword_len;
 		deframer_conf.sync_threshold = 3;
-		deframer_conf.skip_viterbi = 1;
-		deframer_conf.skip_randomizer = 0;
-		deframer_conf.skip_rs = 1;
+		deframer_conf.use_viterbi = false;
+		deframer_conf.use_randomizer = true;
+		deframer_conf.use_rs = false;
 
 		GolayDeframer deframer(deframer_conf);
 		deframer.sinkFrame.connect_member(this, &GolayFramingTest::dummy_frame_sink);
@@ -168,13 +166,29 @@ public:
 
 	}
 
+	void testGenerator()
+	{
+		// Source tavuja pienissä palasissa
+
+	}
+
+	static CppUnit::Test* suite()
+	{
+		CppUnit::TestSuite* suite = new CppUnit::TestSuite("GolayFramingTest");
+		suite->addTest(new CppUnit::TestCaller<GolayFramingTest>("basicTest", &GolayFramingTest::basicTest));
+		return suite;
+	}
+
+
 };
 
 
+#ifndef COMBINED_TEST
 int main(int argc, char** argv)
 {
 	CppUnit::TextUi::TestRunner runner;
-	runner.addTest(new CppUnit::TestCaller<GolayFramingTest>("GolayFramingTest", &GolayFramingTest::basicTest));
+	runner.addTest(GolayFramingTest::suite());
 	runner.run();
 	return 0;
 }
+#endif

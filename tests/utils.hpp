@@ -1,6 +1,8 @@
 #pragma once
 
 #include "suo.hpp"
+#include <fstream>
+#include <random>
 
 namespace suo {
 
@@ -26,5 +28,39 @@ void add_noise(SampleVector& samples, float noise_std);
 void delay_signal(float delay, SampleVector& samples);
 
 void count_bit_errors(Stats& stats, const Frame& transmit_frame, const Frame& received_frame);
+
+
+class EbN0Log
+{
+public:
+	explicit EbN0Log(const std::string& name);
+	void push_results(float snr, const Stats& stats);
+private:
+	std::ofstream file;
+};
+
+
+
+class RandomFrameGenerator {
+public:
+	explicit RandomFrameGenerator(unsigned int frame_len);
+	RandomFrameGenerator(unsigned int frame_min_len, unsigned int frame_max_len);
+	void set_seed(unsigned int seed);
+	void source_frame(Frame& frame, Timestamp _now);
+	void set_release_time(Timestamp time);
+	void set_verbose(bool v);
+	void set_frame_count(int c);
+
+	const Frame& latest_frame() const { return frame; } 
+
+private:
+	std::mt19937 random_generator;
+	unsigned int frame_min_len, frame_max_len;
+	int frame_count;
+	Timestamp release_time;
+	Frame frame;
+	bool verbose;
+};
+
 
 };

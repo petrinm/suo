@@ -5,8 +5,8 @@
 #include <cppunit/TestCaller.h>
 #include <cppunit/ui/text/TestRunner.h>
 
-#include "suo.hpp"
-#include "generators.hpp"
+#include <suo.hpp>
+#include <generators.hpp>
 
 
 using namespace std;
