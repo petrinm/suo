@@ -6,7 +6,7 @@
 
 #include <iomanip>
 #include <ctime>
-#include "boost/variant.hpp"
+
 
 using namespace suo;
 using namespace std;
