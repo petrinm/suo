@@ -46,7 +46,9 @@ void Plotter::plot() {
 	matplot::plot(data);
 }
 
-
+void Plotter::show() {
+	matplot::show();
+}
 
 ComplexPlotter::ComplexPlotter(size_t size) :
 	auto_plot(false),
@@ -164,6 +166,10 @@ void ComplexPlotter::plot_fft() {
 	auto fig = figure();
 	matplot::plot(fft);
 	xlim({ 0.0, (double)nfft });
+}
+
+void ComplexPlotter::show() {
+	matplot::show();
 }
 
 #endif /* PLOTTER */

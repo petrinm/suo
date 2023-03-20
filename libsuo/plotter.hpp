@@ -18,6 +18,8 @@ public:
 	bool auto_clear;
 
 	std::vector<double> data;
+	static void show();
+
 };
 
 class ComplexPlotter
@@ -41,6 +43,8 @@ public:
 	void plot();
 	void plot_constellation();
 	void plot_fft();
+
+	static void show();
 
 	bool auto_plot;
 	bool auto_clear;
