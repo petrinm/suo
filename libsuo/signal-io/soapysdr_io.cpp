@@ -22,7 +22,7 @@ using namespace suo;
 using namespace std;
 
 
-static int running = 1;
+static bool running = true;
 
 #ifdef _WIN32
 static BOOL WINAPI winhandler(DWORD ctrl)
@@ -30,7 +30,7 @@ static BOOL WINAPI winhandler(DWORD ctrl)
 	switch (ctrl) {
 	case CTRL_C_EVENT:
 	case CTRL_CLOSE_EVENT:
-		running = 0;
+		running = false;
 		return TRUE;
 	default:
 		return FALSE;
@@ -40,21 +40,22 @@ static BOOL WINAPI winhandler(DWORD ctrl)
 static void sighandler(int sig)
 {
 	(void)sig;
-	running = 0;
+	running = false;
 }
 #endif
 
 
 SoapySDRIO::Config::Config() {
 	buffer = 2048;
-	rx_on = 1;
-	tx_on = 1;
-	tx_cont = 0;
-	use_time = 1;
+	rx_on = true;
+	tx_on = true;
+	tx_cont = false;
+	half_duplex = true;
+	use_time = true;
 	tx_latency = 8192;
 	samplerate = 1e6;
-	rx_centerfreq = 433.8e6;
-	tx_centerfreq = 433.8e6;
+	rx_centerfreq = 433e6; // [Hz]
+	tx_centerfreq = 433e6; // [Hz]
 	rx_gain = 60;
 	tx_gain = 80;
 	rx_channel = 0;
@@ -65,14 +66,35 @@ SoapySDRIO::Config::Config() {
 
 
 SoapySDRIO::SoapySDRIO(const Config& conf) :
-	conf(conf)
+	conf(conf),
+	sdr(NULL),
+	rxstream(NULL),
+	txstream(NULL)
 {
 }
 
 SoapySDRIO::~SoapySDRIO() {
 
+	if (rxstream != NULL) {
+		cerr << "Deactivating RX stream" << endl;
+		sdr->deactivateStream(rxstream, 0, 0);
+		sdr->closeStream(rxstream);
+	}
+
+	if (txstream != NULL) {
+		cerr << "Deactivating TX stream" << endl;
+		sdr->deactivateStream(txstream, 0, 0);
+		sdr->closeStream(txstream);
+	}
+
+	if (sdr != NULL) {
+		cerr << "Closing device" << endl;
+		SoapySDR::Device::unmake(sdr);
+	}
+
 }
 
+// SoapySDR::timeNsToTicks(
 
 void SoapySDRIO::execute()
 {
@@ -81,55 +103,48 @@ void SoapySDRIO::execute()
 	const long long tx_latency_time = sample_ns * conf.tx_latency;
 	const size_t rx_buflen = conf.buffer;
 	// Reserve a bit more space in TX buffer to allow for timing variations
-	const size_t tx_buflen = rx_buflen * 3 / 2;
+	//const size_t tx_buflen = 610000 - 1000;
+	const size_t tx_buflen = 4e6; //8 * rx_buflen; // (rx_buflen * 3) / 2;
 	// Timeout a few times the buffer length
-	const long timeout_us = sample_ns * 0.001 * 10.0 * rx_buflen;
+	const long timeout_us = (sample_ns * rx_buflen) * 0.1;
 	// Used for lost sample detection
 	const long long timediff_max = sample_ns * 0.5;
 
 	//if (conf.rx_on && (sample_sink == NULL || sample_sink_arg == NULL))
 	///	throw SuoError("RX is enabled but no sample sink provided");
-	if (conf.tx_on)
-		throw SuoError("TX is enabled but no sample source provided");
+	//if (conf.tx_on)
+	//	throw SuoError("TX is enabled but no sample source provided");
 
-	if (conf.rx_on == 0 && conf.tx_on == 0)
+	if (conf.rx_on == false && conf.tx_on == false)
 		throw SuoError("Neither RX or TX enabled");
 
 	/*--------------------------------
 	 ---- Hardware initialization ----
 	 ---------------------------------*/
 
-
 #ifdef _WIN32
 	SetConsoleCtrlHandler(winhandler, TRUE);
 #else
 	{
-	struct sigaction sigact;
-	sigact.sa_handler = sighandler;
-	sigemptyset(&sigact.sa_mask);
-	sigact.sa_flags = 0;
-	sigaction(SIGINT, &sigact, NULL);
-	sigaction(SIGTERM, &sigact, NULL);
-	sigaction(SIGQUIT, &sigact, NULL);
-	sigaction(SIGPIPE, &sigact, NULL);
+		struct sigaction sigact;
+		sigact.sa_handler = sighandler;
+		sigemptyset(&sigact.sa_mask);
+		sigact.sa_flags = 0;
+		sigaction(SIGINT, &sigact, NULL);
+		sigaction(SIGTERM, &sigact, NULL);
+		sigaction(SIGQUIT, &sigact, NULL);
+		sigaction(SIGPIPE, &sigact, NULL);
 	}
 #endif
+
+	cout << "Soapy args: ";
+	for (auto pair: conf.args)
+		cout << pair.first << "=" << pair.second << ", ";
+	cout << endl;
 
 	sdr = SoapySDR::Device::make(conf.args);
-	if(sdr == NULL) {
-		throw SuoError("sdr->make");
-	}
-
-#if 0
-	cerr << "Configuring USRP GPIO" << endl;
-	unsigned int gpio_mask = 0x100;
-	sdr->writeGPIO("FP0:CTRL", gpio_mask, gpio_mask);
-	sdr->writeGPIO("FP0:DDR", gpio_mask, gpio_mask);
-	sdr->writeGPIO("FP0:ATR_0X", 0, gpio_mask);
-	sdr->writeGPIO("FP0:ATR_RX", 0, gpio_mask);
-	sdr->writeGPIO("FP0:ATR_TX", gpio_mask, gpio_mask);
-	sdr->writeGPIO("FP0:ATR_XX", gpio_mask, gpio_mask);
-#endif
+	if (sdr == NULL)
+		throw SuoError("Failed to open SoapyDevice");
 
 	if (conf.rx_on) {
 		cerr << "Configuring RX" << endl;
@@ -155,17 +170,6 @@ void SoapySDRIO::execute()
 		sdr->setSampleRate(SOAPY_SDR_TX, conf.tx_channel, conf.samplerate);
 	}
 
-#if SOAPY_SDR_API_VERSION < 0x00080000
-	if (conf.rx_on) {
-		sdr->setupStream(&rxstream, SOAPY_SDR_RX,
-			SOAPY_SDR_CF32, &conf.rx_channel, 1, &conf.rx_args);
-	}
-
-	if (conf.tx_on) {
-		sdr->setupStream(&txstream, SOAPY_SDR_TX,
-			SOAPY_SDR_CF32, &conf.tx_channel, 1, &conf.tx_args);
-	}
-#else
 	if (conf.rx_on) {
 		std::vector<size_t> rx_channels = { conf.rx_channel };
 		rxstream = sdr->setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32, rx_channels, conf.rx_args);
@@ -179,12 +183,11 @@ void SoapySDRIO::execute()
 		if(txstream == NULL)
 			throw SuoError("Failed to create TX stream");
 	}
-#endif
 
 	cerr << "Starting streams" << endl;
-	if (conf.rx_on)
+	if (rxstream)
 		sdr->activateStream(rxstream);
-	if (conf.tx_on)
+	if (txstream && conf.tx_active)
 		sdr->activateStream(txstream);
 
 
@@ -192,8 +195,8 @@ void SoapySDRIO::execute()
 	 --------- Main loop ---------
 	 -----------------------------*/
 
-	bool tx_burst_going = 0;
-	Timestamp current_time = 0;
+	bool tx_active = false;
+	current_time = 0;
 
 	if (conf.use_time) {
 		sdr->setHardwareTime(0); // Reset timer
@@ -205,59 +208,73 @@ void SoapySDRIO::execute()
 	 * ended, i.e. where the next buffer should begin */
 	Timestamp tx_last_end_time = (Timestamp)current_time + tx_latency_time;
 
-	SampleVector rxbuf;
-	rxbuf.reserve(rx_buflen);
+	SampleVector rxbuf, txbuf;
+	rxbuf.resize(rx_buflen);
+	txbuf.resize(tx_buflen);
 
-	SampleVector txbuf;
-	txbuf.reserve(tx_buflen);
-
+	// Array of buffers for Soapy interface
 	void* rxbuffs[] = { rxbuf.data() };
 	const void* txbuffs[] = { txbuf.data() };
 
+	SampleGenerator sample_gen;
 
 	while(running) {
-		if (conf.rx_on) {
-	
+
+		if (conf.rx_on && tx_active == false) {
+
 			long long rx_timestamp = 0;
-			int flags = 0, ret;
-			ret = sdr->readStream(rxstream, rxbuffs, rxbuf.capacity(), flags, rx_timestamp, timeout_us);
+			int rx_flags = 0;
+			int ret = sdr->readStream(rxstream, rxbuffs, rx_buflen, rx_flags, rx_timestamp, timeout_us);
+			//cout << "rx_timestamp " << rx_timestamp << endl;
 			if (ret > 0) {
-				rxbuf.resize(ret);
+
+				rxbuf.timestamp = rx_timestamp;
+				const size_t new_samples = (size_t)ret;
+				rxbuf.resize(new_samples);
+				//if (new_samples != rx_buflen)
+				//	cout << "Received only " << new_samples << " samples" << endl;
+				
 
 				/* Estimate current time from the end of the received buffer.
-				* If there's no timestamp, make one up by incrementing time.
-				*
-				* If there were no lost samples, the received buffer should
-				* begin from the previous "current" time. Calculate the
-				* difference to detect lost samples.
-				* TODO: if configured, feed zero padding samples to receiver
-				* module to correct timing after lost samples. */
-				if (conf.use_time && (flags & SOAPY_SDR_HAS_TIME)) {
+				 * If there's no timestamp, make one up by incrementing time.
+				 *
+				 * If there were no lost samples, the received buffer should
+				 * begin from the previous "current" time. Calculate the
+				 * difference to detect lost samples.
+				 * TODO: if configured, feed zero padding samples to receiver
+				 * module to correct timing after lost samples. */
+				if (conf.use_time && (rx_flags & SOAPY_SDR_HAS_TIME)) {
 					long long prev_time = current_time;
-					current_time = rx_timestamp + sample_ns * ret;
+					current_time = rx_timestamp + sample_ns * new_samples;
 
+					// Time jump warnings
+					// This can produce a lot of print, not the best way to do it
 					long long timediff = rx_timestamp - prev_time;
-					// this can produce a lot of print, not the best way to do it
 					if (timediff < -timediff_max)
 						cerr << rx_timestamp << ": Time went backwards " << -timediff  << " ns!" << endl;
 					else if (timediff > timediff_max)
 						cerr << rx_timestamp << ": Lost samples for " << timediff << "  ns!" << endl;
 					
 				} else {
-					rx_timestamp = current_time; // from previous iteration
-					current_time += sample_ns * ret + 0.5;
+					/* No hardware timestamps supported so estimate current
+					 * timestamp from previous iteration */
+					rx_timestamp = current_time;
+					current_time += sample_ns * new_samples + 0.5; // +0.5 to ensure rounding up
 				}
 
-				if (tx_burst_going == 0 /*&& !c.half_duplex*/)
+				// Pass the samples to other blocks
+				if (!(tx_active && conf.half_duplex))
 					sinkSamples.emit(rxbuf, rx_timestamp);
 
 			}
 			else if (ret == SOAPY_SDR_OVERFLOW) {
 				cerr << "RX OVERFLOW" << endl;
-			} else if(ret <= 0) {
+			} else if(ret < 0) {
 				throw SuoError("sdr->readStream: %d", ret);
 			}
-		} else {
+
+		}
+		else {
 			/* TX-only case */
 			if (conf.use_time) {
 				/* There should be a blocking call somewhere, so maybe
@@ -274,91 +291,110 @@ void SoapySDRIO::execute()
 		}
 
 		if (conf.tx_on) {
-			int flags = 0, ret = 0;
+
 
 			Timestamp tx_from_time = tx_last_end_time;
-			Timestamp tx_until_time = (Timestamp)current_time + tx_latency_time;
-			int nsamp = round((double)(tx_until_time - tx_from_time) / sample_ns);
+			//Timestamp tx_until_time = (Timestamp)current_time + tx_latency_time;
+			//size_t new_sample = round((double)(tx_until_time - tx_from_time) / sample_ns);
+			//new_sample = max(new_sample, tx_buflen);
 
-			//fprintf(stderr, "TX nsamp: %d\n", nsamp);
-			int tx_len = 0;
 
-			if (nsamp > 0) {
-				if ((unsigned)nsamp > tx_buflen)
-					nsamp = tx_buflen;
-				sourceSamples.emit(txbuf, tx_from_time);
-				tx_last_end_time = tx_from_time + (Timestamp)(sample_ns * tx_len);
-			}
+			if (tx_active) {
+				/*
+				 * Transmission/Burst on going on
+				 */
 
-			//if (conf.use_time)
-			//	flags = SOAPY_SDR_HAS_TIME;
+				// Generate new samples 
+				int tx_flags = 0;
+				txbuf.clear();
+				sample_gen.sourceSamples(txbuf);
 
-			if (tx_burst_going && tx_len == 0) {
-				/* If end of burst flag wasn't sent in last round,
-				 * send it now together with one dummy sample.
-				 * One sample is sent because trying to send
-				 * zero samples gave a timeout error. */
-				txbuf[0] = 0;
+				if (txbuf.empty()) {
+					/* If end of burst flag wasn't sent in last round,
+					 * send it now together with one dummy sample.
+					 * One sample is sent because trying to send
+					 * zero samples gave a timeout error. */
 
-				flags |= SOAPY_SDR_END_BURST;
-				ret = sdr->writeStream(txstream, txbuffs, 1, flags, tx_from_time, timeout_us);
-				if(ret <= 0)
-					throw SuoError("sdr->writeStream (end of burst)", ret);
-				tx_burst_going = 0;
-			}
+					txbuf.resize(1);
+					txbuf[0] = 0;
 
-			if (tx_len > 0) {
-				//fprintf(stderr, "TX nsamp: %d\n", tx_len);
-				// If ntx.end does not point to end of the buffer, a burst has ended
-				if ( 0 /* tx_len < nsamp */) {
-					flags |= SOAPY_SDR_END_BURST;
-					tx_burst_going = 0;
-				} else {
-					tx_burst_going = 1;
+					tx_flags |= SOAPY_SDR_END_BURST;
+
+					cout << "Warning: End of TX samples without end_of_burst!" << endl;
 				}
 
+				if (sample_gen.running() == false || (txbuf.flags & VectorFlags::end_of_burst) != 0)
+					tx_flags |= SOAPY_SDR_END_BURST;
+
+				/* Write what we have */
 				Timestamp t = tx_from_time + (Timestamp)(sample_ns * 0);
-				ret = sdr->writeStream(txstream, txbuffs, txbuf.size(), flags, t, timeout_us);
-				if(ret <= 0)
+				int flags = tx_flags;
+				int ret = sdr->writeStream(txstream, txbuffs, txbuf.size(), flags, t);
+				cout << " sdr->writeStream " << ret << endl;
+				if (ret <= 0)
 					throw SuoError("sdr->writeStream %d", ret);
-			} else {
-				tx_burst_going = 0;
+
+				// Deactivate txstream
+				if ((tx_flags & SOAPY_SDR_END_BURST) != 0) {
+					cout << "end of burst" << endl;
+					if (conf.tx_active == false)
+						sdr->deactivateStream(txstream);
+					tx_active = false; 
+				}
+				
 			}
+			else {
+
+				//tx_last_end_time = tx_from_time + (Timestamp)(sample_ns * txbuf.size());
+
+				sample_gen = generateSamples.emit(tx_from_time);
+				if (sample_gen.running()) {
+
+					// Source samples
+					sample_gen.sourceSamples(txbuf);
+					cout << "start of burst " << txbuf.size() << endl;
+
+					/* New burst or start of transmission */
+					int tx_flags = 0;
+					tx_active = true;
+
+					if ((txbuf.flags & VectorFlags::start_of_burst) == 0)
+						cout << "Warning: start of burst no properly marked!" << endl;
+
+					if (txbuf.flags & VectorFlags::has_timestamp)
+						tx_flags |= SOAPY_SDR_HAS_TIME;
+
+					if ((txbuf.flags & VectorFlags::end_of_burst) != 0) {
+						tx_flags |= SOAPY_SDR_END_BURST;
+						tx_active = false;
+					}
+
+					Timestamp t = tx_from_time + (Timestamp)(sample_ns * 0);
+					
+					if (conf.tx_active == false)
+						sdr->activateStream(txstream, tx_flags, t);
+
+					// Write samples to buffer
+					int ret = sdr->writeStream(txstream, txbuffs, txbuf.size(), tx_flags, t, timeout_us);
+					cout << " sdr->writeStream " << ret << endl;
+					if ((size_t)ret != txbuf.size())
+						throw SuoError("sdr->writeStream %d", ret);
+						
+				}
+
+			}
+
 		}
 
 		/* Send ticks */
-		if (1 /* sinkTicks.empty() */) {
-
-			unsigned int flags = 0;
-
-			if (1) // TODO
-				flags |= SUO_FLAGS_RX_ACTIVE;
-			if (0) // TODO
-				flags |= SUO_FLAGS_RX_LOCKED;
-			if (tx_burst_going == 1 || tx_last_end_time > (Timestamp)current_time)
-				flags |= SUO_FLAGS_TX_ACTIVE;
-
-			sinkTicks.emit(flags, current_time);
+		if (1) {
+			sinkTicks.emit(current_time);
 		}
 
 	}
 
 	cerr << "Stopped receiving" << endl;
 
-exit_soapy:
-	//deinitialize(suo); //TODO moved somewhere else
-
-	if(rxstream != NULL) {
-		fprintf(stderr, "Deactivating stream\n");
-		sdr->deactivateStream(rxstream, 0, 0);
-		sdr->closeStream(rxstream);
-	}
-	if(sdr != NULL) {
-		fprintf(stderr, "Closing device\n");
-		sdr->unmake(sdr);
-	}
-
-	fprintf(stderr, "Done\n");
 }
 
 
