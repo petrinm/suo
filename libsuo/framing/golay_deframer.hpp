@@ -4,7 +4,7 @@
 
 #include "suo.hpp"
 #include "coding/reed_solomon.hpp"
-#include "coding/viterbi_decoder.hpp"
+//#include "coding/viterbi_decoder.hpp"
 
 namespace suo
 {
@@ -73,7 +73,7 @@ private:
 	/* Configuration */
 	Config conf;
 	ReedSolomon rs;
-	ConvolutionalEncoder conv_coder;
+	//ViterbiDecoder viterbi;
 	uint64_t syncword_mask;
 
 	/* State */

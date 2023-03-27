@@ -1,10 +1,10 @@
 #include <iostream>
 
-
 #include "framing/golay_deframer.hpp"
 #include "framing/golay_framer.hpp"
 #include "coding/golay24.hpp"
 #include "coding/randomizer.hpp"
+
 #include "registry.hpp"
 
 
@@ -24,8 +24,8 @@ GolayDeframer::Config::Config() {
 
 GolayDeframer::GolayDeframer(const Config& conf) :
 	conf(conf),
-	rs(RSCodes::CCSDS_RS_255_223),
-	conv_coder(ConvolutionCodes::CCSDS_1_2_7)
+	rs(RSCodes::CCSDS_RS_255_223)
+//	viterbi(ConvolutionCodes::CCSDS_1_2_7)
 {
 	if (conf.syncword_len > 8 * sizeof(conf.syncword))
 		throw SuoError("Unrealistic syncword length");
