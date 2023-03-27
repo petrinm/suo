@@ -112,8 +112,13 @@ ZMQSubscriber::ZMQSubscriber(const ZMQSubscriber::Config& conf):
 		zmq_socket.connect(conf.connect);
 	}
 
-	if (conf.subscribe.empty() == false)
+	if (conf.subscribe.empty() == false) {
+#if CPPZMQ_VERSION >= 40700
 		zmq_socket.set(zmq::sockopt::subscribe, conf.subscribe);
+#else
+		zmq_socket.setsockopt(ZMQ_SUBSCRIBE, conf.subscribe);
+#endif
+	}
 }
 
 
@@ -126,7 +131,11 @@ ZMQSubscriber::~ZMQSubscriber()
 void ZMQSubscriber::reset() {
 	/* Flush possible queued frames */
 	zmq::message_t msg;
+#if CPPZMQ_VERSION >= 40700
 	zmq_socket.set(zmq::sockopt::rcvtimeo, 500); // [ms]
+#else
+	zmq_socket.setsockopt(ZMQ_RCVTIMEO, 500); // [ms]
+#endif
 	while (1) {
 		auto res = zmq_socket.recv(msg);
 		if (res.has_value() == false)
