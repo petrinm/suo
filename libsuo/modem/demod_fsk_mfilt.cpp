@@ -1,11 +1,11 @@
 #include <iostream>
 #include <algorithm> // clamp
 //#include <format>
+#include "plotter.hpp"
 
 #include "modem/demod_fsk_mfilt.hpp"
 #include "registry.hpp"
 
-#include <matplot/matplot.h>
 
 using namespace std;
 using namespace suo;
