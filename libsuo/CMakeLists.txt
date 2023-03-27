@@ -12,8 +12,7 @@ add_library(suo SHARED
     suo.cpp
     frame.cpp
     generators.cpp
-    plotter.cpp
-    modem/demod_fsk_corrbank.cpp
+#    modem/demod_fsk_corrbank.cpp
     modem/demod_fsk_mfilt.cpp
 #    modem/demod_fsk_quad.cpp
     modem/demod_gmsk_cont.cpp
@@ -22,11 +21,11 @@ add_library(suo SHARED
     modem/mod_fsk.cpp
     modem/mod_gmsk.cpp
     modem/mod_psk.cpp
-#    coding/convolutional_encoder.cpps
+    coding/convolutional_encoder.cpp
 #    coding/differential.cpp
     coding/golay24.cpp
     coding/randomizer.cpp
-#    coding/reed_solomon.cpp
+    coding/reed_solomon.cpp
 #    coding/viterbi_decoder.cpp
     coding/crc.cpp
     framing/golay_deframer.cpp
@@ -37,12 +36,10 @@ add_library(suo SHARED
     framing/syncword_framer.cpp
 #    framing/tetra_deframer.cpp
     framing/utils.cpp
-    frame-io/amqp_interface.cpp
     frame-io/zmq_interface.cpp
     frame-io/file_dump.cpp
     signal-io/file_io.cpp
     signal-io/soapysdr_io.cpp
-    misc/porthouse_tracker.cpp
     misc/rigctl.cpp
 )
 
@@ -73,6 +70,10 @@ if (AMQPCPP_FOUND)
     target_include_directories(suo PUBLIC ${AMQPCPP_INCLUDE_DIRS})
     target_link_libraries(suo PUBLIC ${AMQPCPP_LIBRARIES})
     target_compile_definitions(suo PUBLIC SUO_SUPPORT_AMQP)
+    target_sources(suo PRIVATE 
+        frame-io/amqp_interface.cpp
+        misc/porthouse_tracker.cpp
+    )
 endif()
 
 # Find Matplot++
@@ -81,6 +82,7 @@ if (Matplot++_FOUND)
     target_include_directories(suo PRIVATE ${Matplot++_INCLUDE_DIRS})
     target_link_libraries(suo PUBLIC Matplot++::matplot)
     target_compile_definitions(suo PUBLIC SUO_SUPPORT_PLOTTING)
+    target_sources(suo PRIVATE plotter.cpp)
 endif()
 
 # Find ALSA
