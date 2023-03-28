@@ -122,7 +122,7 @@ public:
 		add_noise(samples, noise_std);
 		delay_signal(randuf(0.0f, 1.0f), samples);
 
-#if 1
+#if 0
 		ComplexPlotter iq_plot(samples);
 		iq_plot.iq.resize(1000);
 		iq_plot.plot();
