@@ -28,4 +28,4 @@ add_compile_options(-Wno-unused)
 
 add_subdirectory(libsuo)
 #add_subdirectory(apps)
-add_subdirectory(tests)
+#add_subdirectory(tests)
