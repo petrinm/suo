@@ -149,11 +149,10 @@ public:
 
 		// Assert the transmit and received frames
 		CPPUNIT_ASSERT(received_frame.empty() == false);
-		CPPUNIT_ASSERT(received_frame.data.size() == transmit_frame.data.size());
-		CPPUNIT_ASSERT(transmit_frame.data == received_frame.data);
+		CPPUNIT_ASSERT(received_frame.data.size() == frame_gen.latest_frame().data.size());
+		CPPUNIT_ASSERT(frame_gen.latest_frame().data == received_frame.data);
 
-
-		//count_bit_errors(stats, transmit_frame, received_frame);
+		//count_bit_errors(stats, frame_gen.latest_frame(), received_frame);
 		//cout << stats;
 	}
 
