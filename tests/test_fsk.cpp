@@ -7,7 +7,6 @@
 #include <cppunit/TestCaller.h>
 #include <cppunit/ui/text/TestRunner.h>
 
-#include <matplot/matplot.h>
 
 #include "suo.hpp"
 #include "modem/mod_fsk.hpp"
@@ -136,7 +135,7 @@ public:
 		iq_plot.iq.resize(1000);
 		iq_plot.plot();
 		//iq_plot.plot_constellation();
-		matplot::show();
+		ComplexPlotter::show();
 #endif
 
 		// Demodulate the signal
@@ -154,8 +153,8 @@ public:
 		CPPUNIT_ASSERT(transmit_frame.data == received_frame.data);
 
 
-		count_bit_errors(stats, transmit_frame, received_frame);
-		cout << stats;
+		//count_bit_errors(stats, transmit_frame, received_frame);
+		//cout << stats;
 	}
 
 };

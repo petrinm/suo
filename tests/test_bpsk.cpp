@@ -127,7 +127,7 @@ public:
 		iq_plot.iq.resize(1000);
 		iq_plot.plot();
 		//iq_plot.plot_constellation();
-		matplot::show();
+		ComplexPlotter::show();
 #endif
 
 		// Demodulate the signal
