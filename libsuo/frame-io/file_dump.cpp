@@ -21,6 +21,9 @@ FileDump::FileDump(const Config& _conf) :
 		open(conf.filename);
 }
 
+FileDump::~FileDump() {
+	close();
+}
 
 void FileDump::open(const std::string& filename) {
 
@@ -45,13 +48,10 @@ void FileDump::open(const std::string& filename) {
 
 
 void FileDump::close() {
-
 	if (conf.format == FileFormatJSON)
-		output << "]\n";
+		output << "\n]";
 	output.close();
 }
-
-
 
 
 void FileDump::sinkFrame(const Frame& frame, Timestamp timestamp) {

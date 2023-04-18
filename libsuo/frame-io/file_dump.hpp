@@ -29,6 +29,7 @@ public:
 	};
 
 	explicit FileDump(const Config& config = Config());
+	~FileDump();
 
 	void open(const std::string& filename);
 	void close();
