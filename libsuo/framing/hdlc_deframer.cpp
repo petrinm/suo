@@ -111,7 +111,7 @@ void HDLCDeframer::findStartFlag(Symbol bit, Timestamp now)
 
 		// Start new frame
 		frame.setMetadata("sync_timestamp", now);
-		frame.setMetadata("sync_utc_timestamp", getISOCurrentTimestamp());
+		frame.setMetadata("sync_utc_timestamp", getCurrentISOTimestamp());
 
 	}
 	stuffing_counter = bit ? (stuffing_counter + 1) : 0;
@@ -137,7 +137,7 @@ void HDLCDeframer::receivingFrame(Symbol bit, Timestamp now) {
 
 			syncDetected.emit(false, now);
 			frame.setMetadata("completed_timestamp", now);
-			frame.setMetadata("completed_utc_timestamp", getISOCurrentTimestamp());
+			frame.setMetadata("completed_utc_timestamp", getCurrentISOTimestamp());
 
 			if (conf.check_crc) {
 				const size_t len = frame.data.size() - 2;

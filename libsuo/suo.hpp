@@ -68,7 +68,7 @@ protected:
 	//std::map<std::string,int> conf_map;
 };
 
-std::string getISOCurrentTimestamp();
+std::string getCurrentISOTimestamp();
 
 
 }; // namespace suo

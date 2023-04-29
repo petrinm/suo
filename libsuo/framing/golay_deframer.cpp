@@ -74,7 +74,7 @@ void GolayDeframer::findSyncword(Symbol bit, Timestamp now)
 	frame.timestamp = now;
 	frame.setMetadata("sync_errors", sync_errors);
 	frame.setMetadata("sync_timestamp", now);
-	frame.setMetadata("sync_utc_timestamp", getISOCurrentTimestamp());
+	frame.setMetadata("sync_utc_timestamp", getCurrentISOTimestamp());
 
 	syncDetected.emit(true, now);
 	state = ReceivingHeader;
@@ -153,8 +153,6 @@ void GolayDeframer::receivePayload(Symbol bit, Timestamp now)
 	if (++bit_idx < 8)
 		return;
 
-	//cerr << std::hex << latest_bits << endl;
-
 	frame.data.push_back(latest_bits);
 	latest_bits = 0;
 	bit_idx = 0;
@@ -164,7 +162,7 @@ void GolayDeframer::receivePayload(Symbol bit, Timestamp now)
 		return;
 		
 	frame.setMetadata("completed_timestamp", now);
-	frame.setMetadata("completed_utc_timestamp", getISOCurrentTimestamp());
+	frame.setMetadata("completed_utc_timestamp", getCurrentISOTimestamp());
 
 	if (conf.legacy_mode ? ((coded_len & GolayFramer::use_viterbi_flag) != 0) : conf.use_viterbi)
 	{

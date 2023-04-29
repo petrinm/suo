@@ -56,7 +56,7 @@ void SyncwordDeframer::findSyncword(Symbol bit, Timestamp now) {
 	frame.timestamp = now;
 	frame.setMetadata("sync_errors", sync_errors);
 	frame.setMetadata("sync_timestamp", now);
-	frame.setMetadata("sync_utc_timestamp", getISOCurrentTimestamp());
+	frame.setMetadata("sync_utc_timestamp", getCurrentISOTimestamp());
 
 	syncDetected.emit(true, now);
 	state = ReceivingHeader;

@@ -93,6 +93,7 @@ void FileDump::sinkFrame(const Frame& frame, Timestamp timestamp) {
 	}
 	case FileFormatASCIIHex: {
 		/* Print frame data as hexadecimal string to file. */
+		output << "# " << getCurrentISOTimestamp() << endl;
 		output << hex << right << setw(2) << setfill('0');
 		for (unsigned int i = 0; i < frame.data.size(); i++) {
 			output << (int)frame.data[i];

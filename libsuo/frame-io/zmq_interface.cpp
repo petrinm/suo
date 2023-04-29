@@ -354,7 +354,7 @@ int suo::suo_zmq_recv_frame_raw(zmq::socket_t& sock, Frame& frame, zmq::recv_fla
 			return 0;
 	}
 	catch (const zmq::error_t& e) {
-		throw SuoError("zmq_recv_frame: Failed to read data. %s", e.what());
+		throw SuoError("zmq_recv_frame: Failed to read ZMQ socket. %s", e.what());
 	}
 
 	if (msg_data.more() == true)
@@ -381,7 +381,7 @@ int suo::suo_zmq_recv_frame_json(zmq::socket_t& sock, Frame& frame, zmq::recv_fl
 			return 0;
 	}
 	catch (const zmq::error_t& e) {
-		throw SuoError("zmq_recv_frame: Failed to read socket. %s", e.what());
+		throw SuoError("zmq_recv_frame: Failed to read ZMQ socket. %s", e.what());
 	}
 
 	try {

@@ -76,7 +76,7 @@ Timestamp get_time() {
 }
 
 
-string suo::getISOCurrentTimestamp()
+string suo::getCurrentISOTimestamp()
 {
 #if 1
 	timeval curTime;

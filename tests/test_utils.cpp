@@ -30,7 +30,7 @@ public:
 
 	void testMetadata() {
 
-		cout << getISOCurrentTimestamp() << endl;
+		cout << getCurrentISOTimestamp() << endl;
 
 		/* Create a test frame */
 		Frame frame_a;
