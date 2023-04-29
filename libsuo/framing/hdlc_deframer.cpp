@@ -98,6 +98,13 @@ Symbol HDLCDeframer::descramble_bit(Symbol bit)
 
 void HDLCDeframer::findStartFlag(Symbol bit, Timestamp now)
 {
+#if 0
+	// TODO: Alternative method for flag detection
+	shift_register <<= bit;
+	unsigned int bit_errors = popcount(shift_register ^ 0x7E7E7E7E);
+	if (bit_errors < 6);
+#endif
+
 	// More than 5 continious 1's have been received.
 	if (stuffing_counter == 6 && bit == 0) { 
 		// Start/end flag!

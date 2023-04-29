@@ -6,6 +6,7 @@
 #include <string>
 #include <iostream>
 #include <signal.h>
+#include <unistd.h> // usleep
 #include <assert.h>
 
 #include <SoapySDR/Device.hpp>

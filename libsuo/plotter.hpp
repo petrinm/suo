@@ -2,6 +2,11 @@
 
 #include "suo.hpp"
 
+
+#ifdef SUO_SUPPORT_PLOTTING
+#include <matplot/matplot.h>
+#endif
+
 namespace suo {
 
 

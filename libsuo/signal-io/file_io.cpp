@@ -18,7 +18,7 @@ struct noop {
 
 FileIO::Config::Config() {
 	format = "CF32";
-	throttle = true;
+	throttle = false;
 	sample_rate = 100e3; // [Hz]
 }
 
@@ -49,7 +49,6 @@ FileIO::FileIO(const Config& _conf) :
 	if ((in.get() != nullptr && in->bad()) && (out.get() != nullptr && out->bad()))
 		throw SuoError("Neither to file input or output is defined");
 }
-
 
 void FileIO::execute()
 {
