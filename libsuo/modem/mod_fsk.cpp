@@ -14,6 +14,7 @@ FSKModulator::Config::Config() {
 	modindex = 1.f;
 	deviation = 0.0f;
 	bt = 0.5;
+	amplitude = 1.0f;
 	ramp_up_duration = 0;
 	ramp_down_duration = 0;
 }
@@ -112,6 +113,9 @@ void FSKModulator::modulateSamples(Symbol symbol) {
 
 	// Generate samples from the symbol
 	cpfskmod_modulate(l_mod, symbol, mod_output);
+
+	// Scale the signal by the amplitude
+	liquid_vectorcf_mulscalar(mod_output, mod_rate, conf.amplitude, mod_output);
 
 	// Interpolate to final sample rate
 	unsigned int resampler_output = 0;

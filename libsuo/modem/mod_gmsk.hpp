@@ -44,6 +44,9 @@ public:
 		 */
 		float bt;
 
+		/* Signal amplitude */
+		float amplitude;
+
 		/*
 		 * Length of the start/stop ramp in symbols
 		 */

@@ -18,6 +18,7 @@ GMSKModulator::Config::Config() {
 	center_frequency = 100e3;
 	frequency_offset = 0.0f;
 	bt = 0.5;
+	amplitude = 1.0f;
 	ramp_up_duration = 0;
 	ramp_down_duration = 0;
 }
@@ -37,7 +38,7 @@ GMSKModulator::GMSKModulator(const Config& conf) :
 	if (mod_rate < 3)
 		throw SuoError("GMSKModulator: mod_rate < 3");
 
-	/*
+	/* 
 	 * Buffers
 	 */
 	symbols.reserve(64);
@@ -169,6 +170,9 @@ SampleGenerator GMSKModulator::sampleGenerator()
 			mod_samples.resize(mod_rate);
 			gmskmod_modulate(l_mod, symbol, mod_samples.data());
 
+			// Scale the signal by the amplitude
+			liquid_vectorcf_mulscalar(mod_samples.data(), mod_rate, conf.amplitude, mod_samples.data());
+
 			// Interpolate to final sample rate
 			unsigned int num_written = 0;
 			resamp_crcf_execute_block(l_resamp, mod_samples.data(), mod_rate, mod_samples.data(), &num_written);
@@ -197,13 +201,16 @@ SampleGenerator GMSKModulator::sampleGenerator()
 	}
 
 	/*
-	 * Generating random symbols to
+	 * Generating random symbols to generate the postamble.
 	 */
 	for (size_t i = 0; i < trailer_length; i++) {
 
 		// Feed zeros to the modulator to "flush" the gaussian filter
 		mod_samples.resize(mod_rate);
 		gmskmod_modulate(l_mod, 0, mod_samples.data());
+
+		// Scale the signal by the amplitude
+		liquid_vectorcf_mulscalar(mod_samples.data(), mod_rate, conf.amplitude, mod_samples.data());
 
 		// Interpolate to final sample rate
 		unsigned int resampler_output = 0;

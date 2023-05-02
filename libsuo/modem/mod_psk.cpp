@@ -145,6 +145,7 @@ SampleGenerator PSKModulator::sampleGenerator()
 			// Calculate complex symbol from integer symbol
 			Complex complex_symbol;
 			modemcf_modulate(l_mod, symbols[si], &complex_symbol);
+			complex_symbol *= conf.amplitude;
 
 			// Mix up the samples
 			Complex carrier;

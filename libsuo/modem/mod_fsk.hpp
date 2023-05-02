@@ -46,6 +46,9 @@ public:
 		/* Gaussian filter bandwidth-symbol time product */
 		float bt;
 
+		/* Signal amplitude */
+		float amplitude;
+
 		/* Length of the start/stop ramp in symbols */
 		unsigned int ramp_up_duration, ramp_down_duration;
 	};
