@@ -31,7 +31,7 @@ GMSKDemodulator::Config::Config() {
 GMSKDemodulator::GMSKDemodulator(const Config& conf) :
 	conf(conf)
 {
-	m = 4;
+
 	//syncmask = (1ULL << conf.synclen) - 1;
 	//framepos = conf.framelen;
 
@@ -389,7 +389,7 @@ void GMSKDemodulator::execute_sample(Complex _x)
 }
 
 
-void GMSKDemodulator::SinkSamples(SampleVector samples, Timestamp timestamp)
+void GMSKDemodulator::sinkSamples(SampleVector samples, Timestamp timestamp)
 {
 	/* Allocate small buffers from stack */
 	Sample samples2[resampint];

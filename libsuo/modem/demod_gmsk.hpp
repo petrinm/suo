@@ -25,23 +25,28 @@ public:
 		Config();
 
 		/*
-		* Input IQ sample rate as samples per second.
-		*/
+		 * Input IQ sample rate as samples per second.
+		 */
 		float sample_rate;
 
 		/*
-		* Symbol rate as symbols per second
-		*/
+		 * Symbol rate as symbols per second
+		 */
 		float symbol_rate;
 
 		/*
-		* Signal center frequency as Hz
-		*/
+		 * Signal center frequency as Hz
+		 */
 		float center_frequency;
 
+		/*
+		 */
 		unsigned int samples_per_symbol;
 
-		/* bandwidth product */
+		/*
+		 * Gaussian filter bandwidth-time product / excess bandwidth factor.
+		 * Usually 0.3 or 0.5.
+		 */
 		float bt;
 
 		unsigned int sync_word;
@@ -51,11 +56,15 @@ public:
 	explicit GMSKDemodulator(const Config& args = Config());
 	~GMSKDemodulator();
 
+	GMSKDemodulator(const GMSKDemodulator&) = delete;
+	GMSKDemodulator& operator=(const GMSKDemodulator&) = delete;
 
-	void SinkSamples(SampleVector samples, Timestamp timestamp);
+	void sinkSamples(SampleVector samples, Timestamp timestamp);
 	void reset();
 
 	Port<Symbol, Timestamp> SymbolSink;
+
+	void setFrequencyOffset(float frequency_offset);
 
 private:
 

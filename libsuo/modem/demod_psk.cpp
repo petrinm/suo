@@ -134,13 +134,6 @@ void PSKDemodulator::sinkSamples(const SampleVector& samples, Timestamp timestam
 
 		Sample r, x_hat;
 
-
-		enum CostasLoopOrder {
-			CostasLoopBPSK,
-			CostasLoopQPSK,
-			CostasLoopGMSK,
-			CostasLoop8PSK,
-		};
 		enum CostasLoopOrder pll_order = CostasLoopBPSK;
 		const float k = sqrt(2.f) - 1.f;
 
@@ -207,8 +200,8 @@ void PSKDemodulator::lockReceiver(bool locked, Timestamp now) {
 	receiver_lock = locked;
 #if 0
 	if (locked) {
-		//frame->setMetadata("cfo", nco_crcf_get_frequency(l_nco) / nco_1Hz);
-		//frame->setMetadata("rssi", agc_crcf_get_rssi(l_agc));
+		setMetadata.emit("cfo", nco_crcf_get_frequency(l_nco) / nco_1Hz);
+		setMetadata.emit("rssi", agc_crcf_get_rssi(l_agc));
 
 		// Sync acquired
 		symsync_crcf_set_lf_bw(l_sync, conf.symsync_bandwidth1);

@@ -39,6 +39,10 @@ public:
 	explicit PSKModulator(const Config& conf = Config());
 	~PSKModulator();
 	
+	PSKModulator(const PSKModulator&) = delete;
+	PSKModulator& operator=(const PSKModulator&) = delete;
+
+
 	void reset();
 
 	//void sourceSamples(SampleVector& samples, Timestamp now);

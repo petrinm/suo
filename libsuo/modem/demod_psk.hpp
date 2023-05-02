@@ -6,6 +6,14 @@
 
 namespace suo {
 
+
+enum CostasLoopOrder {
+	CostasLoopBPSK,
+	CostasLoopQPSK,
+	CostasLoopGMSK,
+	CostasLoop8PSK,
+};
+
 /*
  * GMSK demodulator
  */
@@ -66,7 +74,11 @@ public:
 	explicit PSKDemodulator(const Config& conf = Config());
 	~PSKDemodulator();
 
+	PSKDemodulator(const PSKDemodulator&) = delete;
+	PSKDemodulator& operator=(const PSKDemodulator&) = delete;
+
 	void reset();
+
 	void sinkSamples(const SampleVector& samples, Timestamp timestamp);
 
 	void lockReceiver(bool locked, Timestamp now);
@@ -75,6 +87,7 @@ public:
 
 	Port<Symbol, Timestamp> sinkSymbol;
 	Port<SoftSymbol, Timestamp> sinkSoftSymbol;
+	Port<const std::string&, const MetadataValue&> setMetadata;
 
 private:
 

@@ -37,6 +37,10 @@ public:
 		 */
 		unsigned int samples_per_symbol;
 
+		/*
+		 * Gaussian filter bandwidth-time product / excess bandwidth factor.
+		 * Usually 0.3 or 0.5.
+		 */
 		float bt;
 
 		/*
@@ -62,12 +66,17 @@ public:
 	explicit FSKMatchedFilterDemodulator(const Config& conf = Config());
 	~FSKMatchedFilterDemodulator();
 
+	FSKMatchedFilterDemodulator(const FSKMatchedFilterDemodulator&) = delete;
+	FSKMatchedFilterDemodulator& operator=(const FSKMatchedFilterDemodulator&) = delete;
+
+
 	void reset();
 	void sinkSamples(const SampleVector& samples, Timestamp timestamp);
 	void lockReceiver(bool locked, Timestamp now);
 
 	Port<Symbol, Timestamp> sinkSymbol;
 	Port<SoftSymbol, Timestamp> sinkSoftSymbol;
+	Port<const std::string&, const MetadataValue&> setMetadata;
 
 	void setFrequencyOffset(float frequency_offset);
 
