@@ -120,7 +120,7 @@ void GolayDeframer::receiveHeader(Symbol bit, Timestamp now)
 	}
 
 	// In any case if RS is used, the length cannot be shorter than RS number of parity bytes or longer than the RS message length. 
-	if (conf.use_rs && frame_len < (32 + 1) && frame_len > 255) {
+	if (conf.use_rs && (frame_len < (32 + 1) || frame_len > 255)) {
 		cerr << "Invalid frame length!" << endl;
 		reset();
 		return;
