@@ -32,6 +32,12 @@ GMSKDemodulator::GMSKDemodulator(const Config& conf) :
 	conf(conf)
 {
 
+
+	// Carson bandwidth rule: Bandwidth = 2 * (deviation + symbol_rate)
+	float signal_bandwidth = 2 * (0.5 * conf.symbol_rate + conf.symbol_rate); // [Hz]
+	if ((abs(conf.center_frequency) + 0.5 * signal_bandwidth) / conf.sample_rate > 0.50)
+		throw SuoError("GMSKDemodulator: Center frequency too large for given sample rate!");
+
 	//syncmask = (1ULL << conf.synclen) - 1;
 	//framepos = conf.framelen;
 

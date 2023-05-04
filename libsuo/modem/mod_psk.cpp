@@ -29,6 +29,11 @@ PSKModulator::PSKModulator(const Config &_conf):
 	mod_rate = (unsigned int)samples_per_symbol + 1;
 	const float resamp_rate = samples_per_symbol / (float)mod_rate;
 
+
+	float signal_bandwidth = conf.symbol_rate; // [Hz]   For BPSK!!!
+	if ((abs(conf.center_frequency) + 0.5 * signal_bandwidth) / conf.sample_rate > 0.5)
+		throw SuoError("PSKModulator: Center frequency too large for given sample rate!");
+
 	/*
 	 * Buffers
 	 */

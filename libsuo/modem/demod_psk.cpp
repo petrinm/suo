@@ -30,6 +30,10 @@ PSKDemodulator::PSKDemodulator(const Config& conf) :
 	conf(conf)
 {
 
+	float signal_bandwidth = conf.symbol_rate; // [Hz]   For BPSK!!!
+	if ((abs(conf.center_frequency) + 0.5 * signal_bandwidth) / conf.sample_rate > 0.5)
+		throw SuoError("PSKDemodulator: Center frequency too large for given sample rate!");
+
 	/* Configure a resampler for a fixed oversampling ratio */
 	float resamprate = conf.symbol_rate * conf.samples_per_symbol / conf.sample_rate;
 	double bw = 0.4 * resamprate / conf.samples_per_symbol;

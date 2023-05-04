@@ -15,7 +15,7 @@ using namespace suo;
 FSKMatchedFilterDemodulator::Config::Config() {
 	sample_rate = 1e6;
 	symbol_rate = 9600;
-	modindex = 0.5;
+	modindex = 0;
 	deviation = 0;
 	bits_per_symbol = 1;
 	samples_per_symbol = 4;
@@ -27,13 +27,13 @@ FSKMatchedFilterDemodulator::Config::Config() {
 }
 
 
-FSKMatchedFilterDemodulator::FSKMatchedFilterDemodulator(const Config& conf) :
-	conf(conf)
+FSKMatchedFilterDemodulator::FSKMatchedFilterDemodulator(const Config& _conf) :
+	conf(_conf)
 {
-	if (conf.sample_rate < 0)
-		throw SuoError("FSKMatchedFilterDemodulator: Negative sample rate! %f", conf.sample_rate);
-	if (conf.symbol_rate < 0)
-		throw SuoError("FSKMatchedFilterDemodulator: Negative sample rate! %f", conf.symbol_rate);
+	if (conf.sample_rate <= 0)
+		throw SuoError("FSKMatchedFilterDemodulator: Negative or zero sample rate! %f", conf.sample_rate);
+	if (conf.symbol_rate <= 0)
+		throw SuoError("FSKMatchedFilterDemodulator: Negative or zero symbol rate! %f", conf.symbol_rate);
 
 	if (conf.modindex < 0)
 		throw SuoError("FSKMatchedFilterDemodulator: Negative modindex! %f", conf.modindex);
@@ -42,14 +42,27 @@ FSKMatchedFilterDemodulator::FSKMatchedFilterDemodulator(const Config& conf) :
 	if (conf.modindex != 0 && conf.deviation != 0)
 		throw SuoError("FSKMatchedFilterDemodulator: Both modindex and deviation defined!");
 
+	if (conf.deviation != 0)
+		conf.modindex = conf.deviation / conf.symbol_rate; // TODO: Generalize for other than 2FSK
+	else if (conf.modindex == 0)
+		throw SuoError("FSKMatchedFilterDemodulator: Neither mod_index or deviation given!");
+
 	if (conf.samples_per_symbol < 2)
 		throw SuoError("FSKMatchedFilterDemodulator: samples_per_symbol < 1! %f", conf.samples_per_symbol);
 
+
 	/* Configure a resampler for a fixed conf.samples_per_symbol ratio */
 	float resamprate = conf.symbol_rate * conf.samples_per_symbol / conf.sample_rate;
-	if (resamprate < 1)
-		throw SuoError("FSKMatchedFilterDemodulator: resamprate < 1! %f", resamprate);
+	if (resamprate > 1)
+		throw SuoError("FSKMatchedFilterDemodulator: resamprate > 1! %f", resamprate);
 
+
+	// Carson bandwidth rule: Bandwidth = 2 * (deviation + symbol_rate) 
+	float signal_bandwidth = 2 * (conf.bits_per_symbol * conf.modindex * conf.symbol_rate + conf.symbol_rate); // [Hz]
+	if ((abs(conf.center_frequency) + 0.5 * signal_bandwidth) / conf.sample_rate > 0.5)
+		throw SuoError("FSKMatchedFilterDemodulator: Center frequency too large for given sample rate!");
+
+	// Resampler
 	double bw = 0.4 * resamprate / conf.samples_per_symbol;
 	int semilen = lroundf(1.0f / bw);
 	l_resamp = resamp_crcf_create(resamprate, semilen, bw, 60.0f, 16);

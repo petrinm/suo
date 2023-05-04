@@ -11,7 +11,7 @@ FSKModulator::Config::Config() {
 	complexity = 2;
 	center_frequency = 100000;
 	frequency_offset = 0;
-	modindex = 1.f;
+	modindex = 0.0f;
 	deviation = 0.0f;
 	bt = 0.5;
 	amplitude = 1.0f;
@@ -41,9 +41,15 @@ FSKModulator::FSKModulator(const Config& _conf) :
 		throw SuoError("FSKModulator: Both modindex and deviation defined!");
 
 	if (conf.deviation != 0)
-		conf.modindex = conf.deviation / conf.sample_rate; // TODO: Generalize for other than 2FSK
+		conf.modindex = conf.deviation / conf.symbol_rate; // TODO: Generalize for other than 2FSK
 	else if (conf.modindex == 0)
 		throw SuoError("FSKModulator: Neither mod_index or deviation given!");
+
+
+	// Carson bandwidth rule: Bandwidth = 2 * (deviation + symbol_rate)
+	float signal_bandwidth = 2 * (/* conf.bits_per_symbol * */ conf.modindex * conf.symbol_rate + conf.symbol_rate);
+	if ((abs(conf.center_frequency) + 0.5 * signal_bandwidth) / conf.sample_rate > 0.5)
+		throw SuoError("FSKModulator: Center frequency too large for given sample rate!");
 
 	center_frequency = pi2f * conf.center_frequency / conf.sample_rate;
 
