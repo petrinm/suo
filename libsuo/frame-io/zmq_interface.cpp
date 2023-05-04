@@ -54,8 +54,6 @@ ZMQPublisher::~ZMQPublisher()
 
 void ZMQPublisher::sinkFrame(const Frame& frame, Timestamp timestamp)
 {
-	//cout << frame(Frame::PrintData | Frame::PrintMetadata | Frame::PrintColored);
-
 	switch (conf.msg_format) {
 	case ZMQMessageFormat::StructuredBinary:
 		suo_zmq_send_frame(zmq_socket, frame, zmq::send_flags::dontwait);
@@ -112,13 +110,12 @@ ZMQSubscriber::ZMQSubscriber(const ZMQSubscriber::Config& conf):
 		zmq_socket.connect(conf.connect);
 	}
 
-	if (conf.subscribe.empty() == false) {
 #if CPPZMQ_VERSION >= 40700
-		zmq_socket.set(zmq::sockopt::subscribe, conf.subscribe);
+	zmq_socket.set(zmq::sockopt::subscribe, conf.subscribe);
 #else
-		zmq_socket.setsockopt(ZMQ_SUBSCRIBE, conf.subscribe);
+	zmq_socket.setsockopt(ZMQ_SUBSCRIBE, conf.subscribe);
 #endif
-	}
+
 }
 
 
@@ -128,7 +125,8 @@ ZMQSubscriber::~ZMQSubscriber()
 }
 
 
-void ZMQSubscriber::reset() {
+void ZMQSubscriber::reset()
+{
 	/* Flush possible queued frames */
 	zmq::message_t msg;
 #if CPPZMQ_VERSION >= 40700
@@ -162,7 +160,7 @@ void ZMQSubscriber::sourceFrame(Frame& frame, Timestamp now)
 		ret = suo_zmq_recv_frame_json(zmq_socket, frame, zmq::recv_flags::dontwait);
 		break;
 	}
-
+#if 0
 	if (ret == 1) {
 		if (frame.id != SUO_MSG_SET) {
 			//parse_set(frame);
@@ -174,6 +172,7 @@ void ZMQSubscriber::sourceFrame(Frame& frame, Timestamp now)
 
 		//cout << frame(Frame::PrintData | Frame::PrintMetadata | Frame::PrintColored | Frame::PrintAltColor);
 	}
+#endif
 }
 
 
@@ -270,8 +269,7 @@ int suo::suo_zmq_recv_frame(zmq::socket_t& sock, Frame& frame, zmq::recv_flags f
 	/* Read the first part */
 	try {
 		auto res = sock.recv(msg_hdr, flags);
-		if (res.value() == 0)
-			return 0;
+		if (!res) return 0;
 	}
 	catch (const zmq::error_t& e) {
 		throw SuoError("zmq_recv_frame: Failed to read message header. %s", e.what());
@@ -290,7 +288,7 @@ int suo::suo_zmq_recv_frame(zmq::socket_t& sock, Frame& frame, zmq::recv_flags f
 	/* Read metadata */
 	try {
 		auto res = sock.recv(msg_metadata, zmq::recv_flags::dontwait);
-		if (res.has_value() == false)
+		if (!res)
 			throw SuoError("zmq_recv_frame: Failed to read metadata.");
 	}
 	catch (const zmq::error_t& e) {
@@ -306,7 +304,7 @@ int suo::suo_zmq_recv_frame(zmq::socket_t& sock, Frame& frame, zmq::recv_flags f
 	/* Read data */
 	try {
 		auto res = sock.recv(msg_data, zmq::recv_flags::dontwait);
-		if (res.has_value() == false)
+		if (!res)
 			throw SuoError("zmq_recv_frame: Failed to read data.");
 	}
 	catch (const zmq::error_t& e) {
@@ -350,7 +348,7 @@ int suo::suo_zmq_recv_frame_raw(zmq::socket_t& sock, Frame& frame, zmq::recv_fla
 	/* Read data */
 	try {
 		auto res = sock.recv(msg_data, zmq::recv_flags::dontwait);
-		if (res.has_value() == false)
+		if (!res)
 			return 0;
 	}
 	catch (const zmq::error_t& e) {
@@ -377,7 +375,7 @@ int suo::suo_zmq_recv_frame_json(zmq::socket_t& sock, Frame& frame, zmq::recv_fl
 	/* Read the first part */
 	try {
 		auto res = sock.recv(msg, flags);
-		if (res.value() == 0)
+		if (!res)
 			return 0;
 	}
 	catch (const zmq::error_t& e) {
@@ -390,6 +388,7 @@ int suo::suo_zmq_recv_frame_json(zmq::socket_t& sock, Frame& frame, zmq::recv_fl
 	}
 	catch (const std::exception& e) {
 		cerr << "Failed to parse received JSON message: " << e.what() << endl;
+		frame.clear();
 	}
 	return 0;
 }
