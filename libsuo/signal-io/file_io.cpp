@@ -6,6 +6,7 @@
 #include <fstream>
 #include <chrono>
 #include <thread>
+#include <iomanip>
 
 
 using namespace std;
@@ -31,19 +32,21 @@ FileIO::FileIO(const Config& _conf) :
 		in.reset(&cin, noop());
 	else if (conf.input.empty() == false) {
 		cout << "Opening '" << conf.input << "' for signal input." << endl;
-		in.reset(new std::ifstream(conf.input));
-		if (in->bad())
+		std::ifstream *input_file = new std::ifstream(conf.input);
+		if (!*input_file)
 			throw SuoError("Failed to open signal input file");
+		in.reset(input_file);
 	}
 
-	/* Reset output stream */
+	/* Setup output stream */
 	if (conf.output == "-")
 		out.reset(&cout, noop());
 	else if (conf.output.empty() == false) {
 		cout << "Opening '" << conf.input << "' for signal output." << endl;
-		out.reset(new std::ofstream(conf.output));
-		if (out->bad())
+		std::ofstream *output_file = new std::ofstream(conf.output);
+		if (!*output_file)
 			throw SuoError("Failed to open signal output file");
+		out.reset(output_file);
 	}
 
 	if ((in.get() != nullptr && in->bad()) && (out.get() != nullptr && out->bad()))
@@ -73,6 +76,7 @@ void FileIO::execute()
 		read_buffer = reinterpret_cast<char*>(buffer.data());
 	}
 
+	unsigned int total_samples = 0;
 
 	while (true) {
 
@@ -83,11 +87,13 @@ void FileIO::execute()
 
 			// Read more samples
 			size_t read_len = in->readsome(read_buffer, input_format_size * buffer_len);
-			if (read_len == 0)
+			if (read_len == 0) // TODO: Check for EOF not for read=0
 				break;
+
 			if ((read_len % input_format_size) != 0)
 				throw SuoError("Number of read bytes is not diviable by the input format size!");
 			new_samples = read_len / input_format_size;
+			total_samples += new_samples;
 
 
 			// Convert the samples to complex floats if needed
@@ -116,6 +122,9 @@ void FileIO::execute()
 			std::this_thread::sleep_for(std::chrono::nanoseconds(samples_ns));
 		
 	}
+
+	cout << "Processed " << total_samples << " samples in total";
+	cout << " (" << fixed << setprecision(1) << (total_samples / conf.sample_rate) << " seconds)" << endl;
 }
 
 
