@@ -84,6 +84,7 @@ Symbol HDLCFramer::scramble_bit(Symbol bit) {
 
 
 SymbolGenerator HDLCFramer::generateSymbols(Timestamp now) {
+	frame.clear();
 	sourceFrame.emit(frame, now);
 	if (frame.empty() == false)
 		return symbolGenerator();

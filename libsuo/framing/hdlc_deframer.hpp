@@ -60,7 +60,7 @@ public:
 	void sinkSymbol(Symbol bit, Timestamp now);
 	//void sinkSymbols(const SymbolVector& symbols, Timestamp timestamp);
 
-	Port<Frame&, Timestamp> sinkFrame;
+	Port<const Frame&, Timestamp> sinkFrame;
 	Port<bool, Timestamp> syncDetected;
 
 private:
