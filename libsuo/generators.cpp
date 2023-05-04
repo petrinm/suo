@@ -189,10 +189,8 @@ void SymbolGenerator::sourceSymbols(SymbolVector& out)
 	try {
 		promise.out = &out;
 
-		while (out.full() == false) {
+		while (out.full() == false && coro_handle.done() == false) {
 			
-			//cout << "generate_more " << out.size() << " < " << out.capacity() << endl;
-
 			// Continue execution to generate more samples
 			coro_handle();
 
@@ -303,8 +301,6 @@ std::suspend_always SampleGenerator::SamplePromise::yield_value(const Sample& s)
 std::suspend_always SampleGenerator::SamplePromise::yield_value(const SampleVector& samples)
 {
 	assert(out != nullptr);
-	//cout << "yield many: " << samples.size() << " items" << endl;
-
 	SampleVector::const_iterator iter = samples.begin();
 	SampleVector::const_iterator end = samples.end();
 
@@ -419,7 +415,6 @@ void SampleGenerator::sourceSamples(SampleVector& out)
 		promise.out = &out;
 
 		while (out.full() == false && coro_handle.done() == false) {
-			//cout << "generate_more " << out.size() << " < " << out.capacity() << endl;
 
 			// Continue execution to generate more samples
 			coro_handle();
