@@ -47,6 +47,9 @@ public:
 
 		/* Legacy mode for GomSpace's U482C radios */
 		bool legacy_mode;
+
+		/* Generate more output */
+		bool verbose;
 	};
 
 	explicit GolayDeframer(const Config& conf = Config());

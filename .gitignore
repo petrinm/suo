@@ -3,4 +3,4 @@ build/
 *.gch
 *.xml
 __pycache__
-
+.vs/

@@ -20,6 +20,7 @@ GolayDeframer::Config::Config() {
 	use_randomizer = false;
 	use_rs = false;
 	legacy_mode = false;
+	verbose = false;
 }
 
 GolayDeframer::GolayDeframer(const Config& conf) :
@@ -62,7 +63,8 @@ void GolayDeframer::findSyncword(Symbol bit, Timestamp now)
 	if (sync_errors > conf.sync_threshold)
 		return;
 
-	//cout << "SYNC DETECTED! " << sync_errors << endl;
+	if (conf.verbose)
+		cout << "Sync detected, errors: " << dec << sync_errors << endl;
 
 	/* Syncword found, start saving bits when next bit arrives */
 	bit_idx = 0;
@@ -98,17 +100,21 @@ void GolayDeframer::receiveHeader(Symbol bit, Timestamp now)
 	}
 #endif
 
+	if (conf.verbose)
+		cout << "  Golay decode " << hex << latest_bits << " => ";
+
 	// Decode Golay code
 	coded_len = latest_bits;
 	int golay_errors = decode_golay24(&coded_len);
 	if (golay_errors < 0)
 	{
-		cerr << "Golay decode failed! " << endl;
+		if (conf.verbose)
+			cout << "[fail]" << endl;
 		// TODO: Increase some counter
 		reset();
 		return;
 	}
-
+	
 	// Decode frame length
 	if (conf.legacy_mode) {
 		// The 8 least signigicant bit indicate the length and 
@@ -119,9 +125,13 @@ void GolayDeframer::receiveHeader(Symbol bit, Timestamp now)
 		frame_len = 0xFFF & coded_len;
 	}
 
+	if (conf.verbose)
+		cout << hex << coded_len << " (" << dec << frame_len << ")" << endl;
+
 	// In any case if RS is used, the length cannot be shorter than RS number of parity bytes or longer than the RS message length. 
-	if (conf.use_rs && frame_len < (32 + 1) && frame_len > 255) {
-		cerr << "Invalid frame length!" << endl;
+	if (conf.use_rs && (frame_len < (32 + 1) || frame_len > 255)) {
+		if (conf.verbose)
+            cerr << "  Invalid frame length" << endl;
 		reset();
 		return;
 	}
@@ -132,7 +142,7 @@ void GolayDeframer::receiveHeader(Symbol bit, Timestamp now)
 	// Receive double number of bits if viterbi is used
 	if (conf.legacy_mode ? ((coded_len & GolayFramer::use_viterbi_flag) != 0) : conf.use_viterbi)  {
 		frame_len *= 2;
-		cerr << "Viterbi not yet implemented" << endl;
+		cerr << "  Viterbi not yet implemented" << endl;
 		reset();
 		return;
 	}
@@ -167,7 +177,7 @@ void GolayDeframer::receivePayload(Symbol bit, Timestamp now)
 	if (conf.legacy_mode ? ((coded_len & GolayFramer::use_viterbi_flag) != 0) : conf.use_viterbi)
 	{
 		/* Decode viterbi */
-		cerr << "Viterbi not yet implemented" << endl;
+		cerr << "    Viterbi not yet implemented" << endl;
 		reset();
 		return;
 	}
@@ -192,7 +202,8 @@ void GolayDeframer::receivePayload(Symbol bit, Timestamp now)
 		}
 		catch (SuoError& e) {
 			// TODO: Increment some statistics
-			cerr << "Reed-Solomon failed: " << e.what() << endl;
+            if (conf.verbose)
+			    cerr << "    Reed-Solomon failed: " << e.what() << endl;
 			reset();
 			return;
 		}

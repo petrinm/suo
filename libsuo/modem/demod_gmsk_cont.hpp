@@ -57,6 +57,9 @@ public:
 
 		float symsync_bandwidth0;
 		float symsync_bandwidth1;
+		float symsync_rate_tol;
+
+		bool verbose;
 	};
 
 	GMSKContinousDemodulator(const Config& conf = Config());
@@ -106,6 +109,8 @@ private:
 	/* Buffers */
 	Frame* frame;
 
+	/* for verbose output */
+	Timestamp last_print_time;
 };
 
 }; // namespace suo

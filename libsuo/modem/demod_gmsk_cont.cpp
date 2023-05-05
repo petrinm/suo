@@ -12,7 +12,37 @@ using namespace suo;
 
 #define FRAMELEN_MAX 0x900
 
+// seems that l_symsync->rate wanders off during long periods of noise
+#define SYMSYNC_RATE_LIMIT
 
+#ifdef SYMSYNC_RATE_LIMIT
+struct symsync_rrrf_s {
+	unsigned int h_len;
+	unsigned int k;
+	unsigned int k_out;
+	unsigned int decim_counter;
+	int is_locked;
+	float rate;
+	float del;
+	float tau;
+	float tau_decim;
+	float bf;
+	int b;
+	float q;
+	float q_hat;
+	float B[3];
+	float A[3];
+	iirfiltsos_rrrf pll;
+	float rate_adjustment;
+	unsigned int npfb;
+	firpfb_rrrf mf;
+	firpfb_rrrf dmf;
+};
+
+float symsync_rrrf_get_rate(symsync_rrrf_s* symsync) {
+	return symsync->rate;
+}
+#endif
 
 GMSKContinousDemodulator::Config::Config() {
 	sample_rate = 1e6;
@@ -31,6 +61,9 @@ GMSKContinousDemodulator::Config::Config() {
 
 	symsync_bandwidth0 = 0.01f;
 	symsync_bandwidth1 = 0.01f;
+	symsync_rate_tol = 0.01f;
+
+	verbose = false;
 }
 
 GMSKContinousDemodulator::GMSKContinousDemodulator(const Config& conf) :
@@ -45,7 +78,7 @@ GMSKContinousDemodulator::GMSKContinousDemodulator(const Config& conf) :
 
 	/* Calculate maximum number of output samples after feeding one sample
 	 * to the resampler. This is needed to allocate a big enough array. */
-	resampint = ceil(1 / resamprate);
+	resampint = ceil(resamprate);
 	sample_ns = round(1.0e9 / conf.sample_rate);
 
 	/* 
@@ -80,6 +113,7 @@ GMSKContinousDemodulator::GMSKContinousDemodulator(const Config& conf) :
 	l_symsync = symsync_rrrf_create_rnyquist(LIQUID_FIRFILT_GMSKRX, conf.samples_per_symbol, conf.filter_delay, conf.bt, 16);
 	symsync_rrrf_set_lf_bw(l_symsync, conf.symsync_bandwidth0 / conf.samples_per_symbol);
 
+	last_print_time = 0.0;
 	reset();
 }
 
@@ -107,7 +141,7 @@ void GMSKContinousDemodulator::update_nco()
 	freq_min = nco_1Hz * (center_frequency - 0.5f * conf.symbol_rate);
 	freq_max = nco_1Hz * (center_frequency + 0.5f * conf.symbol_rate);
 
-#if 1
+#if 0
 	// Clamp the NCO frequency between new limits
 	float old_freq = nco_crcf_get_frequency(l_nco);
 	nco_crcf_set_frequency(l_nco, clamp(old_freq, freq_min, freq_max));
@@ -201,6 +235,22 @@ void GMSKContinousDemodulator::sinkSamples(const SampleVector& samples, Timestam
 			//SoftSymbol soft_bit = synced_symbol;
 			//sinkSoftSymbol.emit
 
+#ifdef SYMSYNC_RATE_LIMIT
+			float symsync_rate = symsync_rrrf_get_rate(l_symsync);
+			if (!receiver_lock && (symsync_rate > conf.samples_per_symbol * (1 + conf.symsync_rate_tol)
+				|| symsync_rate < conf.samples_per_symbol * (1 - conf.symsync_rate_tol))) {
+			if (conf.verbose)
+				cout << getCurrentISOTimestamp() << ": Reset symsync, rate out of range: " << symsync_rate << endl;
+				symsync_rrrf_reset(l_symsync);
+			}
+
+			if (conf.verbose && symbol_time > last_print_time + 1 * 60e9) {
+				cout << getCurrentISOTimestamp() << ": symsync rate: " << symsync_rate << ", freq: " << (freq / nco_1Hz) << endl;
+				last_print_time = symbol_time;
+			}
+#endif
+
+
 #if 0
 			//SinkSymbol(decision, timestamp)) {
 			if (0) { 
@@ -223,7 +273,9 @@ void GMSKContinousDemodulator::lockReceiver(bool locked, Timestamp now) {
 		setMetadata.emit("cfo", nco_crcf_get_frequency(l_nco) / nco_1Hz);
 		setMetadata.emit("rssi", agc_crcf_get_rssi(l_agc));
 		setMetadata.emit("bg_rssi", agc_crcf_get_rssi(l_bg_agc));
-
+#ifdef SYMSYNC_RATE_LIMIT
+		setMetadata.emit("symbol_rate", conf.symbol_rate * symsync_rrrf_get_rate(l_symsync) / conf.samples_per_symbol);
+#endif
 		symsync_rrrf_set_lf_bw(l_symsync, conf.symsync_bandwidth1 / conf.samples_per_symbol);
 		nco_crcf_pll_set_bandwidth(l_nco, conf.pll_bandwidth1 * nco_1Hz);
 		agc_crcf_set_bandwidth(l_agc, conf.agc_bandwidth1 / conf.samples_per_symbol);
