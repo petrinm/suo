@@ -185,6 +185,8 @@ void SoapySDRIO::execute()
 			throw SuoError("Failed to create TX stream");
 	}
 
+	configureSDR.emit(sdr);
+
 	cerr << "Starting streams" << endl;
 	if (rxstream)
 		sdr->activateStream(rxstream);

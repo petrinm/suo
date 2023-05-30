@@ -90,6 +90,7 @@ public:
 
 	Port<const SampleVector&, Timestamp> sinkSamples;
 	SourcePort<SampleGenerator, Timestamp> generateSamples;
+	Port<SoapySDR::Device*> configureSDR;
 
 	Port<Timestamp> sinkTicks;
 
