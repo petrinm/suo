@@ -58,7 +58,7 @@ public:
 	void reset();
 
 	void sinkSymbol(Symbol bit, Timestamp now);
-	//void sinkSymbols(const SymbolVector& symbols, Timestamp timestamp);
+	void sinkSymbols(const SymbolVector& symbols, Timestamp now);
 
 	Port<const Frame&, Timestamp> sinkFrame;
 	Port<bool, Timestamp> syncDetected;

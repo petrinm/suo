@@ -44,25 +44,25 @@ extern unsigned int rx_id_counter;
  * Receive related interfaces and data types
  * ----------------------------------------- */
 
-class Block 
+class Block
 {
 public:
 	virtual ~Block() = default;
-	
+
 	//virtual void setConfig(std::string name, std::string value);
 
-	virtual void sinkFrame(const Frame& frame);
-	virtual void sourceFrame(Frame& frame);
+	virtual void sinkFrame(const Frame& frame, suo::Timestamp now);
+	virtual void sourceFrame(Frame& frame, suo::Timestamp now);
 
-	virtual void sinkSymbol(Symbol sym, Timestamp timestamp);
-	virtual void sinkSymbols(const std::vector<Symbol> &symbols, Timestamp timestamp);
-	virtual void sourceSymbols(SymbolVector &symbols, Timestamp timestamp);
+	virtual void sinkSymbol(Symbol sym, Timestamp now);
+	virtual void sinkSymbols(const SymbolVector &symbols, Timestamp now);
+	virtual void sourceSymbols(SymbolVector &symbols, Timestamp now);
 
-	virtual void sinkSoftSymbol(SoftSymbol sym, Timestamp timestamp);
-	virtual void sinkSoftSymbols(const std::vector<SoftSymbol> &sym, Timestamp timestamp);
+	virtual void sinkSoftSymbol(SoftSymbol sym, Timestamp now);
+	virtual void sinkSoftSymbols(const std::vector<SoftSymbol> &sym, Timestamp now);
 
-	virtual void sinkSamples(const SampleVector &samples, Timestamp timestamp);
-	virtual void sourceSamples(const SampleVector &samples, Timestamp timestamp);
+	virtual void sinkSamples(const SampleVector &samples, Timestamp now);
+	virtual void sourceSamples(SampleVector &samples, Timestamp now);
 
 protected:
 	//std::map<std::string,int> conf_map;

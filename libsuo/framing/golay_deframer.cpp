@@ -224,7 +224,7 @@ void GolayDeframer::sinkSymbol(Symbol bit, Timestamp now)
 }
 
 
-void GolayDeframer::sinkSymbols(const std::vector<Symbol> &symbols, Timestamp now)
+void GolayDeframer::sinkSymbols(const SymbolVector& symbols, Timestamp now)
 {
 	for (const Symbol& symbol: symbols)
 		sinkSymbol(symbol, now);

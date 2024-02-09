@@ -55,9 +55,9 @@ public:
 	GolayDeframer& operator=(const GolayDeframer&) = delete;
 
 	void reset();
-	
+
 	void sinkSymbol(Symbol bit, Timestamp time);
-	void sinkSymbols(const std::vector<Symbol>& symbols, Timestamp timestamp);
+	void sinkSymbols(const SymbolVector& symbols, Timestamp timestamp);
 
 	void setMetadata(const std::string& name, const MetadataValue& value);
 

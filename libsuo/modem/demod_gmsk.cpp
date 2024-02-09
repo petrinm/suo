@@ -395,7 +395,7 @@ void GMSKDemodulator::execute_sample(Complex _x)
 }
 
 
-void GMSKDemodulator::sinkSamples(SampleVector samples, Timestamp timestamp)
+void GMSKDemodulator::sinkSamples(const SampleVector& samples, Timestamp timestamp)
 {
 	/* Allocate small buffers from stack */
 	Sample samples2[resampint];

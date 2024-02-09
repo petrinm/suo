@@ -18,7 +18,7 @@ public:
 		STATE_RXPAYLOAD,	   // receive payload data
 		STATE_HELLO,
 	};
-	
+
 	/* Configuration struct for the GMSK demod block */
 	struct Config
 	{
@@ -59,7 +59,7 @@ public:
 	GMSKDemodulator(const GMSKDemodulator&) = delete;
 	GMSKDemodulator& operator=(const GMSKDemodulator&) = delete;
 
-	void sinkSamples(SampleVector samples, Timestamp timestamp);
+	void sinkSamples(const SampleVector& samples, Timestamp timestamp);
 	void reset();
 
 	Port<Symbol, Timestamp> SymbolSink;

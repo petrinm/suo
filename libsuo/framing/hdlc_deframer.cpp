@@ -237,6 +237,12 @@ void HDLCDeframer::sinkSymbol(Symbol bit, Timestamp now)
 
 }
 
+void HDLCDeframer::sinkSymbols(const SymbolVector& symbols, Timestamp now)
+{
+	for (const Symbol& symbol : symbols)
+		sinkSymbol(symbol, now);
+}
+
 Block* createHDLCDeframer(const Kwargs& args)
 {
 	return new HDLCDeframer();

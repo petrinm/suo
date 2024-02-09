@@ -53,18 +53,18 @@ std::ostream& suo::operator<<(std::ostream& _stream, const ByteVector& v) {
 }
 
 
-void Block::sinkFrame(const Frame& frame) { }
-void Block::sourceFrame(Frame& frame) { }
+void Block::sinkFrame(const Frame& frame, Timestamp now) { throw SuoError("Not implemented"); }
+void Block::sourceFrame(Frame& frame, Timestamp now) { throw SuoError("Not implemented"); }
 
-void Block::sinkSymbol(Symbol sym, Timestamp timestamp) { }
-void Block::sinkSymbols(const std::vector<Symbol>& symbols, Timestamp timestamp) { }
-void Block::sourceSymbols(SymbolVector& symbols, Timestamp timestamp) { }
+void Block::sinkSymbol(Symbol sym, Timestamp now) { throw SuoError("Not implemented"); }
+void Block::sinkSymbols(const SymbolVector& symbols, Timestamp now) { throw SuoError("Not implemented"); }
+void Block::sourceSymbols(SymbolVector& symbols, Timestamp now) { throw SuoError("Not implemented"); }
 
-void Block::sinkSoftSymbol(SoftSymbol sym, Timestamp timestamp) { }
-void Block::sinkSoftSymbols(const std::vector<SoftSymbol>& sym, Timestamp timestamp) { }
+void Block::sinkSoftSymbol(SoftSymbol sym, Timestamp now) { throw SuoError("Not implemented"); }
+void Block::sinkSoftSymbols(const std::vector<SoftSymbol>& sym, Timestamp now) { throw SuoError("Not implemented"); }
 
-void Block::sinkSamples(const SampleVector& samples, Timestamp timestamp) { }
-void Block::sourceSamples(const SampleVector& samples, Timestamp timestamp) { }
+void Block::sinkSamples(const SampleVector& samples, Timestamp now) { throw SuoError("Not implemented"); }
+void Block::sourceSamples(SampleVector& samples, Timestamp now) { throw SuoError("Not implemented"); }
 
 
 
