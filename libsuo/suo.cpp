@@ -85,7 +85,7 @@ string suo::getCurrentISOTimestamp()
 	int milli = curTime.tv_usec / 1000;
 	char buf[64];
 	char* p = buf + strftime(buf, sizeof buf, "%FT%T", gmtime(&curTime.tv_sec));
-	sprintf(p, ".%dZ", milli);
+	sprintf(p, ".%03dZ", milli);
 
 	return buf;
 #else
