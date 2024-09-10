@@ -41,6 +41,7 @@ add_library(suo SHARED
     signal-io/file_io.cpp
     signal-io/soapysdr_io.cpp
     misc/rigctl.cpp
+    misc/random_symbols.cpp
 )
 
 
